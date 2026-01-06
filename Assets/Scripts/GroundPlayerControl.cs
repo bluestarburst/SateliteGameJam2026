@@ -18,6 +18,10 @@ public class GroundPlayerControl : MonoBehaviour
     private Vector3 playerVelocity;
     private bool groundedPlayer;
 
+    private bool tethered = false;
+    private Vector3 anchorpoint;
+    private float radiusrestriction;
+
     // Update is called once per frame
     void Update()
     {
@@ -73,6 +77,43 @@ public class GroundPlayerControl : MonoBehaviour
         // Move
         Vector3 finalMove = playerSpeed * (move + playerVelocity);
         finalMove = Quaternion.Euler(0, transform.rotation.eulerAngles.y, 0) * finalMove;
-        controller.Move(finalMove * Time.deltaTime);
+
+        Vector3 currentPosition = transform.position;
+        Vector3 predictedMove = currentPosition + finalMove * Time.deltaTime;
+
+        if (tethered) {
+            predictedMove.y = 0;
+            Vector3 predictedRelativePosition = predictedMove - anchorpoint;
+            float relmag = predictedRelativePosition.magnitude;
+
+            if (relmag > radiusrestriction) {
+                Vector3 newRelativePosition = predictedRelativePosition / relmag * radiusrestriction;
+                Vector3 newPosition = newRelativePosition + anchorpoint;
+                Vector3 newMove = newPosition - transform.position;
+                controller.Move(new Vector3(newMove.x, finalMove.y * Time.deltaTime, newMove.z));
+            }
+            else {
+                controller.Move(finalMove * Time.deltaTime);
+            }
+
+            // Debug.Log("Calculations | P: " + predictedMove + " | A: " + anchorpoint + " | PR: " + predictedRelativePosition);
+            // Debug.Log("PRm: " + relmag + " | RR: " + radiusrestriction + " | Test: " + (relmag > radiusrestriction));
+        }
+        else {
+            controller.Move(finalMove * Time.deltaTime);
+        }
+    }
+
+    public void tetherTo(Vector3 anchor, float distance) {
+        anchor.y = 0;
+        Debug.Log("Tethered to: " + anchor + " | Restricted to: " + distance);
+        anchorpoint = anchor;
+        radiusrestriction = distance;
+        tethered = true;
+    }
+
+    public void untether() {
+        Debug.Log("Untethered");
+        tethered = false;
     }
 }
