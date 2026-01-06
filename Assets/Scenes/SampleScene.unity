@@ -740,7 +740,7 @@ Rigidbody:
   m_UseGravity: 0
   m_IsKinematic: 0
   m_Interpolate: 0
-  m_Constraints: 80
+  m_Constraints: 112
   m_CollisionDetection: 0
 --- !u!114 &1376053531
 MonoBehaviour:
@@ -756,6 +756,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Example
   gravityValue: 0
   controller: {fileID: 1376053525}
+  sensitivity: 1
   moveAction: {fileID: 844562167}
   jumpAction: {fileID: 1091353861}
 --- !u!1660057539 &9223372036854775807

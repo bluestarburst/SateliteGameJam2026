@@ -46,6 +46,9 @@ public class Example : MonoBehaviour
         // new unity input system
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
 
+        // flip x and y for better control
+        mouseInput = new Vector2(-mouseInput.y, mouseInput.x);
+
         transform.Rotate(mouseInput * sensitivity);
         Vector3 eulerRotation = transform.rotation.eulerAngles;
         transform.rotation = Quaternion.Euler(eulerRotation.x, eulerRotation.y, 0);
@@ -67,9 +70,6 @@ public class Example : MonoBehaviour
         Vector3 move = new Vector3(input.x, 0, input.y);
         move = Vector3.ClampMagnitude(move, 1f);
 
-        if (move != Vector3.zero)
-            transform.forward = move;
-
         // Jump using WasPressedThisFrame()
         // if (groundedPlayer && jumpAction.action.WasPressedThisFrame())
         // {
@@ -82,6 +82,11 @@ public class Example : MonoBehaviour
         // Move
         Vector3 finalMove = move * playerSpeed;
         // Vector3 finalMove = move * playerSpeed + Vector3.up * playerVelocity.y;
+
+
+        // get player rotation along y axis and apply it to the movement vector
+        finalMove = Quaternion.Euler(0, transform.rotation.eulerAngles.y, 0) * finalMove;
+
         controller.Move(finalMove * Time.deltaTime);
     }
 }
