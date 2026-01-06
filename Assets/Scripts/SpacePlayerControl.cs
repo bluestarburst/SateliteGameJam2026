@@ -92,10 +92,12 @@ public class SpacePlayerControl : MonoBehaviour
         playerCamera.transform.localRotation = Quaternion.Euler(cameraPitch, 0, 0);
     }
 
+    private Vector3 jumpXZDirection = Vector3.zero;
+
     public void Movement()
     {
 
-        Vector3 move = Vector3.zero;
+        Vector3 move;
 
         if (isGrounded)
         {
@@ -104,7 +106,6 @@ public class SpacePlayerControl : MonoBehaviour
             move = Vector3.ClampMagnitude(move, 1f);
             move = move * playerSpeed;
             playerVelocity.y = -1f;
-;
             playerVelocity.x = move.x;
             playerVelocity.z = move.z;
 
@@ -113,20 +114,30 @@ public class SpacePlayerControl : MonoBehaviour
                 playerVelocity.x = 0;
                 playerVelocity.z = 0;
             }
+
+            move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
+
+        } else
+        {
+            move = jumpXZDirection;
         }
+
+
+        
 
         // Jump using WasPressedThisFrame()
         if (isGrounded && jumpAction.action.WasPressedThisFrame())
         {
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * -9.81f);
             isGrounded = false;
+
+            jumpXZDirection = move;
         }
 
         // Apply gravity
         // playerVelocity.y += gravityValue * Time.deltaTime;
 
-        // move from local space to transform forward and right
-        move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
+
 
         // Move
         Vector3 finalMove = move + groundAvgNormal * playerVelocity.y;
