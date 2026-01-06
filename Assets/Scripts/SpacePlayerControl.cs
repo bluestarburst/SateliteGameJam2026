@@ -1,5 +1,3 @@
-// This first example shows how to move using Input System Package (New)
-
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -16,7 +14,6 @@ public class SpacePlayerControl : MonoBehaviour
 
     public Vector3 groundAvgNormal = Vector3.up;
     public bool isGrounded;
-    private bool groundedPlayer;
 
 
     [Header("Input Actions")]
@@ -40,53 +37,86 @@ public class SpacePlayerControl : MonoBehaviour
     {
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
-        Movement();
         Rotation();
+        Movement();
     }
 
+    private Quaternion tmpRotation = Quaternion.identity;
+    private float cameraPitch = 0.0f;
     public void Rotation()
     {
-        // Vector3 mouseInput = new Vector3(-Input.GetAxis("Mouse Y"), Input.GetAxis("Mouse X"), 0);
+        // 1. GRAVITY / NORMAL ALIGNMENT
 
+        // Check if we are aligned with the ground normal
+        // We use a larger threshold (0.001f) to ensure smoother stops
+        if (Vector3.Distance(transform.up, groundAvgNormal) > 0.001f)
+        {
+            // A. Standard Alignment
+            // Project current forward onto the new ground plane.
+            // This keeps the "Compass" direction the same while changing the "Up".
+            Vector3 projectedForward = Vector3.ProjectOnPlane(transform.forward, groundAvgNormal).normalized;
 
+            // B. Edge Case: "Gimbal Lock" / Looking Straight at Normal
+            // If projectedForward is zero (e.g., looking straight down while gravity flips down),
+            // we can't use 'forward' to determine orientation.
+            // We fallback to projecting the Camera's Up vector or just existing transform.up.
+            if (projectedForward.sqrMagnitude < 0.001f)
+            {
+                // Fallback: Try to maintain the current rotation logic by using the camera's up 
+                // projected on the plane, effectively treating "Up" as the new "Forward" temporarily.
+                projectedForward = Vector3.ProjectOnPlane(transform.up, groundAvgNormal).normalized;
+            }
 
-        // lerp to the new normal to smooth out the rotation using shortest path rotation
-        
+            // C. Apply Rotation
+            // Only apply if we have a valid direction
+            if (projectedForward.sqrMagnitude > 0.001f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(projectedForward, groundAvgNormal);
 
-        transform.up = Vector3.Lerp(transform.up + Vector3.one/1000, groundAvgNormal, Time.deltaTime * 5f);
+                // Slerp handles the 180 flip smoothly. 
+                // If the flip is exactly 180, Slerp will pick the shortest path (pitch or roll).
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
+            }
+        }
 
-        // new unity input system
+        // 2. MOUSE INPUT
+
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
 
-        // flip x and y for better control
-        mouseInput = new Vector2(-mouseInput.y, mouseInput.x);
+        // Yaw (Body Rotation)
+        transform.Rotate(Vector3.up, mouseInput.x * sensitivity);
 
-        playerCamera.transform.Rotate(mouseInput * sensitivity);
-
-        Vector3 eulerRotation = playerCamera.transform.localRotation.eulerAngles;
-        playerCamera.transform.localRotation = Quaternion.Euler(eulerRotation.x, eulerRotation.y, 0);
-        // rotate by the ground avg normal to keep the player aligned with the ground
-        // playerCamera.transform.rotation = Quaternion.FromToRotation(Vector3.up, groundAvgNormal) * playerCamera.transform.rotation;
-
-
+        // Pitch (Camera Rotation)
+        cameraPitch -= mouseInput.y * sensitivity;
+        cameraPitch = Mathf.Clamp(cameraPitch, -85f, 85f);
+        playerCamera.transform.localRotation = Quaternion.Euler(cameraPitch, 0, 0);
     }
 
     public void Movement()
     {
-        groundedPlayer = isGrounded;
 
-        // Read input
-        Vector2 input = moveAction.action.ReadValue<Vector2>();
-        Vector3 move = new Vector3(input.x, 0, input.y);
-        move = Vector3.ClampMagnitude(move, 1f);
+        Vector3 move = Vector3.zero;
 
-        if (groundedPlayer)
+        if (isGrounded)
         {
-            playerVelocity.y = -2f;
+            Vector2 input = moveAction.action.ReadValue<Vector2>();
+            move = new Vector3(input.x, 0, input.y);
+            move = Vector3.ClampMagnitude(move, 1f);
+            move = move * playerSpeed;
+            playerVelocity.y = -1f;
+;
+            playerVelocity.x = move.x;
+            playerVelocity.z = move.z;
+
+            if (move == Vector3.zero)
+            {
+                playerVelocity.x = 0;
+                playerVelocity.z = 0;
+            }
         }
 
         // Jump using WasPressedThisFrame()
-        if (groundedPlayer && jumpAction.action.WasPressedThisFrame())
+        if (isGrounded && jumpAction.action.WasPressedThisFrame())
         {
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * -9.81f);
             isGrounded = false;
@@ -95,15 +125,19 @@ public class SpacePlayerControl : MonoBehaviour
         // Apply gravity
         // playerVelocity.y += gravityValue * Time.deltaTime;
 
+        // move from local space to transform forward and right
+        move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
+
         // Move
-        Vector3 finalMove = move * playerSpeed + Vector3.up * playerVelocity.y;
+        Vector3 finalMove = move + groundAvgNormal * playerVelocity.y;
 
 
-        // get player rotation along y axis and apply it to the movement vector
-        finalMove = Quaternion.Euler(0, playerCamera.transform.localRotation.eulerAngles.y, 0) * finalMove;
 
         // translate the final move vector by the ground average normal to keep the player aligned with the ground
-        finalMove = Quaternion.FromToRotation(Vector3.up, groundAvgNormal) * finalMove;
+        // finalMove = Quaternion.FromToRotation(Vector3.up, groundAvgNormal) * finalMove;
+
+        // rotate the final move to match the forward vector of the camera not the current transform
+        // finalMove = Quaternion.Euler(0, playerCamera.transform.rotation.eulerAngles.y, 0) * finalMove;
 
         controller.Move(finalMove * Time.deltaTime);
     }
