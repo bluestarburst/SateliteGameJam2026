@@ -11,18 +11,31 @@ public class GroundConsoleBlink : MonoBehaviour
 
     private float lastTime = -Mathf.Infinity;
     private float lastMorse = -Mathf.Infinity;
+    private float morseSeperation;
     private bool on = false;
     private bool morseoff = false;
+
+    private bool answering = false;
 
     // Update is called once per frame
     void Update()
     {
-        float morseSeperation = OnNum > 1 ? OnTime / (OnNum * 2 - 1) : OnTime;
-        if (IncomingTransmission)
+        TransmissionInteract parent = GetComponentInParent<TransmissionInteract>();
+        if (parent == null)
+        {
+            Debug.LogError("ParentScript not found on parent!");
+        }
+        else
+        {
+            answering = parent.answeringTransmission;
+        }
+
+        if (IncomingTransmission && !answering)
         {
             float timeSince = Time.time - lastTime;
             if (timeSince > (on ? OnTime : OffTime)) 
             {
+                morseSeperation = OnNum > 1 ? OnTime / (OnNum * 2 - 1) : OnTime;
                 SetEmission(GetComponent<Renderer>(), true, on ? Color.black : Color.red);
                 on = !on;
                 // if (on) Debug.Log("On");
