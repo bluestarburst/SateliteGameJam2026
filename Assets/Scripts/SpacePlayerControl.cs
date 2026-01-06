@@ -8,10 +8,12 @@ public class SpacePlayerControl : MonoBehaviour
     private Vector3 playerVelocity = Vector3.zero;
     private float jumpHeight = 1.5f;
     public float gravityValue = -9.81f;
+
+    public bool hasBooster = false;
+
+
     public CharacterController controller;
     public float sensitivity;
-
-
     public Vector3 groundAvgNormal = Vector3.up;
     public bool isGrounded;
 
@@ -38,92 +40,139 @@ public class SpacePlayerControl : MonoBehaviour
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
         Rotation();
-        Movement();
+        if (isGrounded)
+        {
+            InteriorMovement();
+        }
+        else if (hasBooster)
+        {
+            BoosterMovement();
+        }
+        else
+        {
+            InteriorMovement();
+        }
     }
-
-    private Quaternion tmpRotation = Quaternion.identity;
     private float cameraPitch = 0.0f;
+    private float cameraRoll = 0.0f;
+    private bool wasGrounded;
     public void Rotation()
     {
-        // 1. GRAVITY / NORMAL ALIGNMENT
+        bool justLanded = isGrounded && !wasGrounded;
+        wasGrounded = isGrounded;
 
-        // Check if we are aligned with the ground normal
-        // We use a larger threshold (0.001f) to ensure smoother stops
-        if (Vector3.Distance(transform.up, groundAvgNormal) > 0.001f)
+        // --- 1. GRAVITY / NORMAL ALIGNMENT ---
+
+        if (justLanded)
         {
-            // A. Standard Alignment
-            // Project current forward onto the new ground plane.
-            // This keeps the "Compass" direction the same while changing the "Up".
+            // VIEW STABILIZATION LOGIC
+
+            // A. Capture the exact World Rotation of the camera before we mess with the body
+            Quaternion frozenCamWorldRot = playerCamera.transform.rotation;
+
+            // B. Snap the Player Body to the new Surface Normal instantly
+            Vector3 projectedForward = Vector3.ProjectOnPlane(transform.forward, groundAvgNormal).normalized;
+            if (projectedForward.sqrMagnitude > 0.001f)
+            {
+                transform.rotation = Quaternion.LookRotation(projectedForward, groundAvgNormal);
+            }
+
+            // C. Restore the Camera's World Rotation 
+            // The body has moved, so we force the camera back to where it was looking in World Space
+            playerCamera.transform.rotation = frozenCamWorldRot;
+
+            // D. Recalculate Local Pitch and Roll
+            // Because the parent (Body) moved but the child (Camera) stayed still, 
+            // the Local Rotation of the camera has changed. We must update our variables to match.
+            Vector3 newLocalEuler = playerCamera.transform.localEulerAngles;
+
+            // Update Pitch (Wrap angle to -180 to 180 for clamping)
+            cameraPitch = newLocalEuler.x;
+            if (cameraPitch > 180) cameraPitch -= 360;
+
+            // Update Roll (Crucial for keeping "World Up" different from "Player Up")
+            cameraRoll = newLocalEuler.z;
+        }
+        else if (Vector3.Distance(transform.up, groundAvgNormal) > 0.001f)
+        {
+            // STANDARD WALKING ALIGNMENT (Same as before)
             Vector3 projectedForward = Vector3.ProjectOnPlane(transform.forward, groundAvgNormal).normalized;
 
-            // B. Edge Case: "Gimbal Lock" / Looking Straight at Normal
-            // If projectedForward is zero (e.g., looking straight down while gravity flips down),
-            // we can't use 'forward' to determine orientation.
-            // We fallback to projecting the Camera's Up vector or just existing transform.up.
             if (projectedForward.sqrMagnitude < 0.001f)
             {
-                // Fallback: Try to maintain the current rotation logic by using the camera's up 
-                // projected on the plane, effectively treating "Up" as the new "Forward" temporarily.
                 projectedForward = Vector3.ProjectOnPlane(transform.up, groundAvgNormal).normalized;
             }
 
-            // C. Apply Rotation
-            // Only apply if we have a valid direction
             if (projectedForward.sqrMagnitude > 0.001f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(projectedForward, groundAvgNormal);
-
-                // Slerp handles the 180 flip smoothly. 
-                // If the flip is exactly 180, Slerp will pick the shortest path (pitch or roll).
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
             }
         }
 
-        // 2. MOUSE INPUT
+        // --- 2. MOUSE INPUT ---
 
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
 
-        // Yaw (Body Rotation)
+        // Yaw (Body Rotation) - Rotates around the player's current Up
         transform.Rotate(Vector3.up, mouseInput.x * sensitivity);
 
         // Pitch (Camera Rotation)
         cameraPitch -= mouseInput.y * sensitivity;
         cameraPitch = Mathf.Clamp(cameraPitch, -85f, 85f);
-        playerCamera.transform.localRotation = Quaternion.Euler(cameraPitch, 0, 0);
+
+        // Apply Pitch AND Roll
+        // We now include 'cameraRoll' in the Z axis instead of forcing 0
+        playerCamera.transform.localRotation = Quaternion.Euler(cameraPitch, 0, cameraRoll);
     }
 
     private Vector3 jumpXZDirection = Vector3.zero;
 
-    public void Movement()
+    public void InteriorMovement()
     {
 
         Vector3 move;
 
         if (isGrounded)
+    {
+        Vector2 input = moveAction.action.ReadValue<Vector2>();
+
+        // --- NEW: INPUT ROTATION CORRECTION ---
+        // Get the camera's current Roll (Z-rotation) relative to the body
+        float cameraRollAngle = playerCamera.transform.localEulerAngles.z;
+
+        // Create a rotation that cancels out the camera roll.
+        // We rotate around the Y-axis because our movement input is on the flat XZ plane.
+        // We use NEGATIVE roll because: 
+        // If Camera is rolled +90 (Left is Down), pushing W (Up) needs to move Body Left (-90).
+        Quaternion inputRotation = Quaternion.Euler(0, -cameraRollAngle, 0);
+
+        // Convert 2D input to 3D (x, 0, y) and apply the rotation
+        Vector3 inputDir = new Vector3(input.x, 0, input.y);
+        inputDir = inputRotation * inputDir;
+        // --------------------------------------
+
+        // Continue with the rest of your logic using 'inputDir' instead of creating new vector
+        move = inputDir; 
+        move = Vector3.ClampMagnitude(move, 1f);
+        move = move * playerSpeed;
+        
+        playerVelocity.y = -1f;
+        playerVelocity.x = move.x;
+        playerVelocity.z = move.z;
+
+        if (move == Vector3.zero)
         {
-            Vector2 input = moveAction.action.ReadValue<Vector2>();
-            move = new Vector3(input.x, 0, input.y);
-            move = Vector3.ClampMagnitude(move, 1f);
-            move = move * playerSpeed;
-            playerVelocity.y = -1f;
-            playerVelocity.x = move.x;
-            playerVelocity.z = move.z;
+            playerVelocity.x = 0;
+            playerVelocity.z = 0;
+        }
 
-            if (move == Vector3.zero)
-            {
-                playerVelocity.x = 0;
-                playerVelocity.z = 0;
-            }
-
-            move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
-
-        } else
+        move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
+    }
+        else
         {
             move = jumpXZDirection;
         }
-
-
-        
 
         // Jump using WasPressedThisFrame()
         if (isGrounded && jumpAction.action.WasPressedThisFrame())
@@ -131,26 +180,18 @@ public class SpacePlayerControl : MonoBehaviour
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * -9.81f);
             isGrounded = false;
 
-            jumpXZDirection = move;
+            jumpXZDirection = move * 1.5f;
         }
 
-        // Apply gravity
-        // playerVelocity.y += gravityValue * Time.deltaTime;
-
-
-
-        // Move
+        // Move with 
         Vector3 finalMove = move + groundAvgNormal * playerVelocity.y;
 
-
-
-        // translate the final move vector by the ground average normal to keep the player aligned with the ground
-        // finalMove = Quaternion.FromToRotation(Vector3.up, groundAvgNormal) * finalMove;
-
-        // rotate the final move to match the forward vector of the camera not the current transform
-        // finalMove = Quaternion.Euler(0, playerCamera.transform.rotation.eulerAngles.y, 0) * finalMove;
-
         controller.Move(finalMove * Time.deltaTime);
+    }
+
+    public void BoosterMovement()
+    {
+        // Spacebar should boost the player in the 
     }
 
 }
