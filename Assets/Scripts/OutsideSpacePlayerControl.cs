@@ -1,93 +1,174 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+[RequireComponent(typeof(Rigidbody))]
 public class OutsideSpacePlayerControl : MonoBehaviour
 {
-    public GameObject playerCamera;
-    public float playerSpeed = 5.0f;
-    public float rollSpeed = 5.0f;
-    public float sensitivity;
+    [Header("References")]
+    public Transform cameraTransform;
 
-    private Vector3 playerVelocity = Vector3.zero;
-    private float cameraRoll = 0.0f;
+    [Header("Rotation")]
+    public float sensitivity = 0.1f;
 
-    public CharacterController controller;
+    [Header("Movement")]
+    public float maxSpeed = 10f;
+    public float acceleration = 12f;
+    public float deceleration = 8f;
+    public float damping = 0.98f;
+
+    [Header("Braking")]
+    public float brakeStrength = 20f;
+    public float brakeDamping = 0.95f;
+
+    [Header("Rotation Inertia")]
+    public float rollAcceleration = 120f;
+    public float rollBrakeStrength = 200f;
+    public float rollDamping = 0.9f;
+
+    private float rollVelocity;
 
     [Header("Input Actions")]
     public InputActionReference moveAction;
-    public InputActionReference jumpAction;
-    public InputActionReference crouchAction;
 
-    private void OnEnable()
+    private Rigidbody rb;
+    private Vector3 velocity;
+    private float cameraRoll;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody>();
+    }
+
+    void OnEnable()
     {
         moveAction.action.Enable();
-        jumpAction.action.Enable();
-        crouchAction.action.Enable();
     }
 
-    private void OnDisable()
+    void OnDisable()
     {
         moveAction.action.Disable();
-        jumpAction.action.Disable();
-        crouchAction.action.Disable();
     }
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
     {
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
+    }
+
+    void Update()
+    {
         Rotation();
+    }
+
+    void FixedUpdate()
+    {
+        SpaceBrake();
         ExteriorMovement();
     }
 
-    public void Rotation()
+    void SpaceBrake()
     {
-        // new unity input system
-        Vector2 mouseInput = Mouse.current.delta.ReadValue();
+        if (!Keyboard.current.xKey.isPressed)
+            return;
 
-        // E and Q for Roll (Camera Rotation)
-        if (Keyboard.current.eKey.isPressed)
-        {
-            cameraRoll -= 0.1f;
-        }
-        else if (Keyboard.current.qKey.isPressed)
-        {
-            cameraRoll += 0.1f;
-        }
+        // Smoothly reduce velocity to zero
+        velocity = Vector3.MoveTowards(
+            velocity,
+            Vector3.zero,
+            brakeStrength * Time.fixedDeltaTime
+        );
 
-        float currentRoll = cameraRoll;
-        while (currentRoll > 180) currentRoll -= 360;
-        while (currentRoll < -180) currentRoll += 360;
-
-        // flip x and y for better control
-        mouseInput = new Vector2(-mouseInput.y, mouseInput.x);
-        transform.Rotate(mouseInput * sensitivity);
-
-        // float x = transform.rotation.eulerAngles.x;
-        // if (x > 180f) x -= 360f;
-
-        // x = Mathf.Max(x, -85f);
-        // x = Mathf.Min(x, 85f);
-
-        // transform.rotation = Quaternion.Euler(x, transform.rotation.eulerAngles.y, 0);
+        // Extra damping for crisp stop
+        velocity *= brakeDamping;
     }
 
-    public void ExteriorMovement()
+    // ---------------- ROTATION ----------------
+    void Rotation()
+    {
+        Vector2 mouseInput = Mouse.current.delta.ReadValue();
+
+        float pitch = -mouseInput.y * sensitivity;
+        float yaw   =  mouseInput.x * sensitivity;
+
+        // Roll input → angular velocity
+        if (Keyboard.current.eKey.isPressed)
+            rollVelocity -= rollAcceleration * Time.deltaTime;
+
+        if (Keyboard.current.qKey.isPressed)
+            rollVelocity += rollAcceleration * Time.deltaTime;
+
+        // Brake roll when X is held
+        if (Keyboard.current.xKey.isPressed)
+        {
+            rollVelocity = Mathf.MoveTowards(
+                rollVelocity,
+                0f,
+                rollBrakeStrength * Time.deltaTime
+            );
+        }
+        else
+        {
+            // Natural rotational damping
+            rollVelocity *= rollDamping;
+        }
+
+        Quaternion deltaRotation = Quaternion.Euler(
+            pitch,
+            yaw,
+            rollVelocity * Time.deltaTime
+        );
+
+        rb.MoveRotation(rb.rotation * deltaRotation);
+    }
+
+
+    // ---------------- MOVEMENT ----------------
+    void ExteriorMovement()
     {
         Vector2 input = moveAction.action.ReadValue<Vector2>();
-        Vector3 move = new Vector3(input.x, 0, input.y);
-        move = Vector3.ClampMagnitude(move, 1f);
 
-        Vector3 finalMove = playerSpeed * (move + playerVelocity);
-        finalMove = Quaternion.Euler(0, transform.rotation.eulerAngles.y, 0) * finalMove;
+        Vector3 inputDir =
+            cameraTransform.forward * input.y +
+            cameraTransform.right   * input.x;
 
-        controller.Move(finalMove * Time.deltaTime);
+        if (Keyboard.current.spaceKey.isPressed)
+            inputDir += cameraTransform.up;
+
+        if (Keyboard.current.leftCtrlKey.isPressed)
+            inputDir -= cameraTransform.up;
+
+        inputDir = Vector3.ClampMagnitude(inputDir, 1f);
+
+        if (inputDir.sqrMagnitude > 0.001f)
+        {
+            velocity += inputDir * acceleration * Time.fixedDeltaTime;
+        }
+        else
+        {
+            velocity = Vector3.MoveTowards(
+                velocity,
+                Vector3.zero,
+                deceleration * Time.fixedDeltaTime
+            );
+        }
+
+        velocity = Vector3.ClampMagnitude(velocity, maxSpeed);
+        velocity *= damping;
+
+        rb.linearVelocity = velocity;
+    }
+
+    // ---------------- COLLISION BOUNCE ----------------
+    void OnCollisionEnter(Collision collision)
+    {
+        Vector3 normal = collision.contacts[0].normal;
+
+        // Reflect velocity for bounce
+        velocity = Vector3.Reflect(velocity, normal);
+
+        // Energy loss (tweak this)
+        velocity *= 0.8f;
+
+        rb.linearVelocity = velocity;
     }
 }
