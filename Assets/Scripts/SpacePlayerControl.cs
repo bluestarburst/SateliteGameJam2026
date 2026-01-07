@@ -4,16 +4,16 @@ using UnityEngine.InputSystem;
 public class SpacePlayerControl : MonoBehaviour
 {
     public GameObject playerCamera;
-    private float playerSpeed = 5.0f;
-    private Vector3 playerVelocity = Vector3.zero;
-    private float jumpHeight = 1.5f;
+    public float playerSpeed = 5.0f;
+    public float rollSpeed = 5.0f;
+    public float sensitivity;
     public float gravityValue = -9.81f;
-
     public bool hasBooster = false;
 
+    private Vector3 playerVelocity = Vector3.zero;
+    private float jumpHeight = 1.5f;
 
     public CharacterController controller;
-    public float sensitivity;
     public Vector3 groundAvgNormal = Vector3.up;
     public bool isGrounded;
 
@@ -114,6 +114,27 @@ public class SpacePlayerControl : MonoBehaviour
 
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
 
+        // E and Q for Roll (Camera Rotation)
+        if (Keyboard.current.eKey.isPressed)
+        {
+            cameraRoll -= 0.1f;
+        }
+        else if (Keyboard.current.qKey.isPressed)
+        {
+            cameraRoll += 0.1f;
+        }
+
+        float currentRoll = cameraRoll;
+        while (currentRoll > 180) currentRoll -= 360;
+        while (currentRoll < -180) currentRoll += 360;
+
+        // If we are significantly upside down (roll > 90), invert controls
+        // This makes "Mouse Up" look towards the top of your SCREEN, not the top of your HEAD
+        if (Mathf.Abs(currentRoll) > 90f)
+        {
+            mouseInput = -mouseInput;
+        }
+
         // Yaw (Body Rotation) - Rotates around the player's current Up
         transform.Rotate(Vector3.up, mouseInput.x * sensitivity);
 
@@ -153,7 +174,7 @@ public class SpacePlayerControl : MonoBehaviour
 
             // get the forward of the camera projected onto the ground plane
             Vector3 cameraForward = Vector3.ProjectOnPlane(playerCamera.transform.forward, groundAvgNormal).normalized;
-            Vector3 cameraRight = Vector3.Cross(groundAvgNormal, cameraForward).normalized;
+            Vector3 cameraRight = Vector3.ProjectOnPlane(playerCamera.transform.right, groundAvgNormal).normalized;
 
             move = cameraForward * move.z + cameraRight * move.x;
 
