@@ -1,3 +1,4 @@
+
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -53,47 +54,27 @@ public class SpacePlayerControl : MonoBehaviour
             InteriorMovement();
         }
     }
-    private float cameraPitch = 0.0f;
-    private float cameraRoll = 0.0f;
-    private bool wasGrounded;
+    private bool wasGrounded = false;
+    private bool needsAlignment = true;
+
+    private Vector3 lastNormal = Vector3.up;
     public void Rotation()
     {
-        bool justLanded = isGrounded && !wasGrounded;
+        bool justLanded = !wasGrounded && isGrounded;
         wasGrounded = isGrounded;
-
-        // --- 1. GRAVITY / NORMAL ALIGNMENT ---
 
         if (justLanded)
         {
-            // VIEW STABILIZATION LOGIC
-
-            // A. Capture the exact World Rotation of the camera before we mess with the body
-            Quaternion frozenCamWorldRot = playerCamera.transform.rotation;
-
-            // B. Snap the Player Body to the new Surface Normal instantly
-            Vector3 projectedForward = Vector3.ProjectOnPlane(transform.forward, groundAvgNormal).normalized;
-            if (projectedForward.sqrMagnitude > 0.001f)
-            {
-                transform.rotation = Quaternion.LookRotation(projectedForward, groundAvgNormal);
-            }
-
-            // C. Restore the Camera's World Rotation 
-            // The body has moved, so we force the camera back to where it was looking in World Space
-            playerCamera.transform.rotation = frozenCamWorldRot;
-
-            // D. Recalculate Local Pitch and Roll
-            // Because the parent (Body) moved but the child (Camera) stayed still, 
-            // the Local Rotation of the camera has changed. We must update our variables to match.
-            Vector3 newLocalEuler = playerCamera.transform.localEulerAngles;
-
-            // Update Pitch (Wrap angle to -180 to 180 for clamping)
-            cameraPitch = newLocalEuler.x;
-            if (cameraPitch > 180) cameraPitch -= 360;
-
-            // Update Roll (Crucial for keeping "World Up" different from "Player Up")
-            cameraRoll = newLocalEuler.z;
+            lastNormal = groundAvgNormal;
         }
-        else if (Vector3.Distance(transform.up, groundAvgNormal) > 0.001f)
+
+        if (!justLanded && lastNormal != groundAvgNormal)
+        {
+            needsAlignment = Vector3.Distance(transform.up, groundAvgNormal) > 0.001f;
+            lastNormal = groundAvgNormal;
+        }
+
+        if (needsAlignment)
         {
             // STANDARD WALKING ALIGNMENT (Same as before)
             Vector3 projectedForward = Vector3.ProjectOnPlane(transform.forward, groundAvgNormal).normalized;
@@ -108,43 +89,33 @@ public class SpacePlayerControl : MonoBehaviour
                 Quaternion targetRotation = Quaternion.LookRotation(projectedForward, groundAvgNormal);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
             }
+
+            if (Vector3.Distance(transform.up, groundAvgNormal) <= 0.001f)
+            {
+                needsAlignment = false;
+            }
         }
 
-        // --- 2. MOUSE INPUT ---
-
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
+
+        float currentRoll = 0f;
 
         // E and Q for Roll (Camera Rotation)
         if (Keyboard.current.eKey.isPressed)
         {
-            cameraRoll -= 0.1f;
+            currentRoll = -0.1f;
         }
         else if (Keyboard.current.qKey.isPressed)
         {
-            cameraRoll += 0.1f;
+            currentRoll = 0.1f;
         }
 
-        float currentRoll = cameraRoll;
         while (currentRoll > 180) currentRoll -= 360;
         while (currentRoll < -180) currentRoll += 360;
 
-        // If we are significantly upside down (roll > 90), invert controls
-        // This makes "Mouse Up" look towards the top of your SCREEN, not the top of your HEAD
-        if (Mathf.Abs(currentRoll) > 90f)
-        {
-            mouseInput = -mouseInput;
-        }
+        // Apply relative rotation to the camera
+        playerCamera.transform.Rotate(-mouseInput.y * sensitivity * Time.deltaTime, mouseInput.x * sensitivity * Time.deltaTime, currentRoll * rollSpeed * Time.deltaTime, Space.Self);
 
-        // Yaw (Body Rotation) - Rotates around the player's current Up
-        transform.Rotate(Vector3.up, mouseInput.x * sensitivity);
-
-        // Pitch (Camera Rotation)
-        cameraPitch -= mouseInput.y * sensitivity;
-        cameraPitch = Mathf.Clamp(cameraPitch, -85f, 85f);
-
-        // Apply Pitch AND Roll
-        // We now include 'cameraRoll' in the Z axis instead of forcing 0
-        playerCamera.transform.localRotation = Quaternion.Euler(cameraPitch, 0, cameraRoll);
     }
 
     private Vector3 jumpXZDirection = Vector3.zero;

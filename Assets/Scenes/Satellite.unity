@@ -1198,7 +1198,7 @@ MonoBehaviour:
   playerCamera: {fileID: 330585543}
   playerSpeed: 5
   rollSpeed: 5
-  sensitivity: 1
+  sensitivity: 15
   gravityValue: -9.81
   hasBooster: 0
   controller: {fileID: 1376053525}
