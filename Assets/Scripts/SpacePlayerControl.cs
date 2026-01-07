@@ -134,41 +134,30 @@ public class SpacePlayerControl : MonoBehaviour
         Vector3 move;
 
         if (isGrounded)
-    {
-        Vector2 input = moveAction.action.ReadValue<Vector2>();
-
-        // --- NEW: INPUT ROTATION CORRECTION ---
-        // Get the camera's current Roll (Z-rotation) relative to the body
-        float cameraRollAngle = playerCamera.transform.localEulerAngles.z;
-
-        // Create a rotation that cancels out the camera roll.
-        // We rotate around the Y-axis because our movement input is on the flat XZ plane.
-        // We use NEGATIVE roll because: 
-        // If Camera is rolled +90 (Left is Down), pushing W (Up) needs to move Body Left (-90).
-        Quaternion inputRotation = Quaternion.Euler(0, -cameraRollAngle, 0);
-
-        // Convert 2D input to 3D (x, 0, y) and apply the rotation
-        Vector3 inputDir = new Vector3(input.x, 0, input.y);
-        inputDir = inputRotation * inputDir;
-        // --------------------------------------
-
-        // Continue with the rest of your logic using 'inputDir' instead of creating new vector
-        move = inputDir; 
-        move = Vector3.ClampMagnitude(move, 1f);
-        move = move * playerSpeed;
-        
-        playerVelocity.y = -1f;
-        playerVelocity.x = move.x;
-        playerVelocity.z = move.z;
-
-        if (move == Vector3.zero)
         {
-            playerVelocity.x = 0;
-            playerVelocity.z = 0;
-        }
+            Vector2 input = moveAction.action.ReadValue<Vector2>();
+            move = new Vector3(input.x, 0, input.y);
+            move = Vector3.ClampMagnitude(move, 1f);
+            move = move * playerSpeed;
+            playerVelocity.y = -1f;
+            playerVelocity.x = move.x;
+            playerVelocity.z = move.z;
 
-        move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
-    }
+            if (move == Vector3.zero)
+            {
+                playerVelocity.x = 0;
+                playerVelocity.z = 0;
+            }
+
+            // move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
+
+            // get the forward of the camera projected onto the ground plane
+            Vector3 cameraForward = Vector3.ProjectOnPlane(playerCamera.transform.forward, groundAvgNormal).normalized;
+            Vector3 cameraRight = Vector3.Cross(groundAvgNormal, cameraForward).normalized;
+
+            move = cameraForward * move.z + cameraRight * move.x;
+
+        }
         else
         {
             move = jumpXZDirection;
