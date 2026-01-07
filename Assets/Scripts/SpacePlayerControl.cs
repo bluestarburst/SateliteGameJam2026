@@ -4,16 +4,16 @@ using UnityEngine.InputSystem;
 public class SpacePlayerControl : MonoBehaviour
 {
     public GameObject playerCamera;
-    private float playerSpeed = 5.0f;
-    private Vector3 playerVelocity = Vector3.zero;
-    private float jumpHeight = 1.5f;
+    public float playerSpeed = 5.0f;
+    public float rollSpeed = 5.0f;
+    public float sensitivity;
     public float gravityValue = -9.81f;
-
     public bool hasBooster = false;
 
+    private Vector3 playerVelocity = Vector3.zero;
+    private float jumpHeight = 1.5f;
 
     public CharacterController controller;
-    public float sensitivity;
     public Vector3 groundAvgNormal = Vector3.up;
     public bool isGrounded;
 
@@ -114,6 +114,27 @@ public class SpacePlayerControl : MonoBehaviour
 
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
 
+        // E and Q for Roll (Camera Rotation)
+        if (Keyboard.current.eKey.isPressed)
+        {
+            cameraRoll -= 0.1f;
+        }
+        else if (Keyboard.current.qKey.isPressed)
+        {
+            cameraRoll += 0.1f;
+        }
+
+        float currentRoll = cameraRoll;
+        while (currentRoll > 180) currentRoll -= 360;
+        while (currentRoll < -180) currentRoll += 360;
+
+        // If we are significantly upside down (roll > 90), invert controls
+        // This makes "Mouse Up" look towards the top of your SCREEN, not the top of your HEAD
+        if (Mathf.Abs(currentRoll) > 90f)
+        {
+            mouseInput = -mouseInput;
+        }
+
         // Yaw (Body Rotation) - Rotates around the player's current Up
         transform.Rotate(Vector3.up, mouseInput.x * sensitivity);
 
@@ -134,41 +155,30 @@ public class SpacePlayerControl : MonoBehaviour
         Vector3 move;
 
         if (isGrounded)
-    {
-        Vector2 input = moveAction.action.ReadValue<Vector2>();
-
-        // --- NEW: INPUT ROTATION CORRECTION ---
-        // Get the camera's current Roll (Z-rotation) relative to the body
-        float cameraRollAngle = playerCamera.transform.localEulerAngles.z;
-
-        // Create a rotation that cancels out the camera roll.
-        // We rotate around the Y-axis because our movement input is on the flat XZ plane.
-        // We use NEGATIVE roll because: 
-        // If Camera is rolled +90 (Left is Down), pushing W (Up) needs to move Body Left (-90).
-        Quaternion inputRotation = Quaternion.Euler(0, -cameraRollAngle, 0);
-
-        // Convert 2D input to 3D (x, 0, y) and apply the rotation
-        Vector3 inputDir = new Vector3(input.x, 0, input.y);
-        inputDir = inputRotation * inputDir;
-        // --------------------------------------
-
-        // Continue with the rest of your logic using 'inputDir' instead of creating new vector
-        move = inputDir; 
-        move = Vector3.ClampMagnitude(move, 1f);
-        move = move * playerSpeed;
-        
-        playerVelocity.y = -1f;
-        playerVelocity.x = move.x;
-        playerVelocity.z = move.z;
-
-        if (move == Vector3.zero)
         {
-            playerVelocity.x = 0;
-            playerVelocity.z = 0;
-        }
+            Vector2 input = moveAction.action.ReadValue<Vector2>();
+            move = new Vector3(input.x, 0, input.y);
+            move = Vector3.ClampMagnitude(move, 1f);
+            move = move * playerSpeed;
+            playerVelocity.y = -1f;
+            playerVelocity.x = move.x;
+            playerVelocity.z = move.z;
 
-        move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
-    }
+            if (move == Vector3.zero)
+            {
+                playerVelocity.x = 0;
+                playerVelocity.z = 0;
+            }
+
+            // move = transform.TransformDirection(new Vector3(playerVelocity.x, 0, playerVelocity.z));
+
+            // get the forward of the camera projected onto the ground plane
+            Vector3 cameraForward = Vector3.ProjectOnPlane(playerCamera.transform.forward, groundAvgNormal).normalized;
+            Vector3 cameraRight = Vector3.ProjectOnPlane(playerCamera.transform.right, groundAvgNormal).normalized;
+
+            move = cameraForward * move.z + cameraRight * move.x;
+
+        }
         else
         {
             move = jumpXZDirection;
