@@ -160,7 +160,7 @@ public class SpacePlayerControl : MonoBehaviour
             move = new Vector3(input.x, 0, input.y);
             move = Vector3.ClampMagnitude(move, 1f);
             move = move * playerSpeed;
-            playerVelocity.y = -1f;
+            playerVelocity.y = -0.1f;
             playerVelocity.x = move.x;
             playerVelocity.z = move.z;
 

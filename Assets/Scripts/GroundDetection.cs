@@ -27,7 +27,7 @@ public class GroundDetection : MonoBehaviour
     void OnCollisionEnter(Collision collision)
     {
         // Ignore the parent object (the player)
-        if (collision.gameObject == playerControl.gameObject)
+        if (collision.gameObject.tag != "Ground")
         {
             return;
         }
@@ -42,19 +42,63 @@ public class GroundDetection : MonoBehaviour
         }
 
         // get up of the entire object
-        Vector3 normal = collision.gameObject.transform.up;
+        // Vector3 normal = collision.gameObject.transform.up;
+
+        // get average normals of contact points
+        Vector3 normal = Vector3.zero;
+        foreach (ContactPoint contact in collision.contacts)
+        {
+            normal += contact.normal;
+        }
+        normal /= collision.contacts.Length;
+        
         contactNormals.Add(collision.gameObject, normal);
         playerControl.groundAvgNormal = CalculateGroundAvgNormal();
         playerControl.isGrounded = true;
     }
 
+    private float lastGroundCheckTime = 0.0f;
+
     void OnCollisionStay(Collision collision)
     {
-        // Do something every frame the collision is active
+        // watch for new contact points and update the normal if they change
+        if (collision.gameObject.tag != "Ground")
+        {
+            return;
+        }
+
+        // only trigger every 0.1 seconds to avoid spamming the console
+        if (Time.time - lastGroundCheckTime < 0.1f)
+        {
+            return;
+        }
+
+        Vector3 normal = Vector3.zero;
+        foreach (ContactPoint contact in collision.contacts)
+        {
+            normal += contact.normal;
+        }
+        normal /= collision.contacts.Length;
+
+        if (contactNormals.ContainsKey(collision.gameObject))
+        {
+            contactNormals[collision.gameObject] = normal;
+        }
+        else
+        {
+            contactNormals.Add(collision.gameObject, normal);
+        }
+        playerControl.groundAvgNormal = CalculateGroundAvgNormal();
+        playerControl.isGrounded = true;
+        lastGroundCheckTime = Time.time;
     }
 
     void OnCollisionExit(Collision collision)
     {
+        if (collision.gameObject.tag != "Ground")
+        {
+            return;
+        }
         Debug.Log($"Stopped colliding with: {collision.gameObject.name}");
         // Do something when the collision ends
         contactNormals.Remove(collision.gameObject);
