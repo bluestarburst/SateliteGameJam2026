@@ -40,6 +40,12 @@ public class SteamManager : MonoBehaviour
     public SteamId OpponentSteamId { get; set; }
     public bool LobbyPartnerDisconnected { get; set; }
 
+    // Multi-peer tracking
+    public event Action<SteamId, string> RemotePlayerJoined;
+    public event Action<SteamId> RemotePlayerLeft;
+    private readonly Dictionary<SteamId, Friend> remoteMembers = new();
+    public IReadOnlyCollection<SteamId> RemotePlayerIds => remoteMembers.Keys;
+
     public List<Lobby> activeUnrankedLobbies = new();
     public List<Lobby> activeRankedLobbies = new();
     public Lobby currentLobby;
@@ -221,11 +227,13 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyMemberDisconnectedCallback(Lobby lobby, Friend friend)
     {
+        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
         OtherLobbyMemberLeft(friend);
     }
 
     private void OnLobbyMemberLeaveCallback(Lobby lobby, Friend friend)
     {
+        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
         OtherLobbyMemberLeft(friend);
     }
 
@@ -238,19 +246,12 @@ public class SteamManager : MonoBehaviour
 
         Debug.Log("Opponent has left the lobby");
         LobbyPartnerDisconnected = true;
-        try
-        {
-            SteamNetworking.CloseP2PSessionWithUser(friend.Id);
-        }
-        catch
-        {
-            Debug.Log("Unable to close P2P session cleanly");
-        }
+        RemoveRemoteMember(friend.Id);
     }
 
     private void OnLobbyGameCreatedCallback(Lobby lobby, uint ip, ushort port, SteamId steamId)
     {
-        AcceptP2P(OpponentSteamId);
+        SyncRemoteMembersWithLobby(lobby);
         if (!string.IsNullOrEmpty(gameSceneName))
         {
             SceneManager.LoadScene(gameSceneName);
@@ -284,13 +285,11 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyEnteredCallback(Lobby lobby)
     {
-        if (lobby.MemberCount != 1)
+        SyncRemoteMembersWithLobby(lobby);
+
+        if (lobby.MemberCount != 1 && !string.IsNullOrEmpty(gameSceneName))
         {
-            AcceptP2P(OpponentSteamId);
-            if (!string.IsNullOrEmpty(gameSceneName))
-            {
-                SceneManager.LoadScene(gameSceneName);
-            }
+            SceneManager.LoadScene(gameSceneName);
         }
     }
 
@@ -312,10 +311,16 @@ public class SteamManager : MonoBehaviour
             }
         }
 
+        foreach (var remote in remoteMembers.Keys.ToList())
+        {
+            RemoveRemoteMember(remote);
+        }
+        remoteMembers.Clear();
+        OpponentSteamId = default;
+
         currentLobby = joinedLobby;
-        OpponentSteamId = id;
         LobbyPartnerDisconnected = false;
-        AcceptP2P(OpponentSteamId);
+        SyncRemoteMembersWithLobby(joinedLobby);
         if (!string.IsNullOrEmpty(gameSceneName))
         {
             SceneManager.LoadScene(gameSceneName);
@@ -335,15 +340,15 @@ public class SteamManager : MonoBehaviour
     private void OnLobbyMemberJoinedCallback(Lobby lobby, Friend friend)
     {
         Debug.Log("someone else joined lobby");
+        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
         if (friend.Id == PlayerSteamId)
         {
             return;
         }
 
         LobbyPartner = friend;
-        OpponentSteamId = friend.Id;
-        AcceptP2P(OpponentSteamId);
         LobbyPartnerDisconnected = false;
+        AddRemoteMember(friend);
     }
 
     private void OnDlcInstalledCallback(AppId appId)
@@ -402,14 +407,11 @@ public class SteamManager : MonoBehaviour
             Debug.Log("Error leaving current lobby");
         }
 
-        try
+        foreach (var remote in remoteMembers.Keys.ToList())
         {
-            SteamNetworking.CloseP2PSessionWithUser(OpponentSteamId);
+            RemoveRemoteMember(remote);
         }
-        catch
-        {
-            Debug.Log("Error closing P2P session with opponent");
-        }
+        remoteMembers.Clear();
     }
 
     public async Task<bool> CreateFriendLobby()
@@ -495,6 +497,89 @@ public class SteamManager : MonoBehaviour
 
         string richPresenceKey = "steam_display";
         SteamFriends.SetRichPresence(richPresenceKey, "#" + sceneName);
+    }
+
+    // --- Multi-peer helpers ---
+
+    private void SyncRemoteMembersWithLobby(Lobby lobby)
+    {
+        if (lobby.Id.Value == 0) return;
+
+        foreach (var member in lobby.Members)
+        {
+            AddRemoteMember(member);
+        }
+
+        var toRemove = remoteMembers.Keys
+            .Where(id => lobby.Members.All(m => m.Id != id))
+            .ToList();
+
+        foreach (var id in toRemove)
+        {
+            RemoveRemoteMember(id);
+        }
+    }
+
+    private void AddRemoteMember(Friend friend)
+    {
+        if (friend.Id == PlayerSteamId) return;
+
+        remoteMembers[friend.Id] = friend;
+
+        // Maintain legacy single-opponent field for older code paths
+        if (OpponentSteamId.Value == 0)
+        {
+            OpponentSteamId = friend.Id;
+        }
+
+        LobbyPartnerDisconnected = false;
+        AcceptP2P(friend.Id);
+
+        RemotePlayerJoined?.Invoke(friend.Id, friend.Name);
+        TryAutoSpawnRemotePlayer(friend.Id, friend.Name);
+    }
+
+    private void RemoveRemoteMember(SteamId steamId)
+    {
+        if (steamId == PlayerSteamId) return;
+
+        bool removed = remoteMembers.Remove(steamId);
+        if (removed)
+        {
+            try
+            {
+                SteamNetworking.CloseP2PSessionWithUser(steamId);
+            }
+            catch
+            {
+                Debug.Log("Unable to close P2P session cleanly for remote member");
+            }
+
+            RemotePlayerLeft?.Invoke(steamId);
+            TryDespawnRemotePlayer(steamId);
+        }
+
+        if (remoteMembers.Count == 0)
+        {
+            LobbyPartnerDisconnected = true;
+            OpponentSteamId = default;
+        }
+        else if (OpponentSteamId == steamId)
+        {
+            OpponentSteamId = remoteMembers.Keys.First();
+        }
+    }
+
+    private void TryAutoSpawnRemotePlayer(SteamId steamId, string displayName)
+    {
+        if (NetworkConnectionManager.Instance == null) return;
+        NetworkConnectionManager.Instance.SpawnRemotePlayerFor(steamId, displayName);
+    }
+
+    private void TryDespawnRemotePlayer(SteamId steamId)
+    {
+        if (NetworkConnectionManager.Instance == null) return;
+        NetworkConnectionManager.Instance.DespawnRemotePlayer(steamId);
     }
 
     // --- SteamNetworkingSockets helpers (optional relay path) ---

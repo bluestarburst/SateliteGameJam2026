@@ -1,0 +1,166 @@
+using Steamworks;
+using UnityEngine;
+
+/// <summary>
+/// Synchronizes physics state for free-standing objects (soccer ball, etc.).
+/// Uses last-touch authority model - whoever last collided with the object becomes authoritative.
+/// Authority player simulates physics and broadcasts state; others interpolate/extrapolate.
+/// </summary>
+[RequireComponent(typeof(NetworkIdentity), typeof(Rigidbody))]
+public class NetworkPhysicsObject : MonoBehaviour
+{
+    [SerializeField] private float sendRate = 10f; // Hz
+    [SerializeField] private float authorityHandoffCooldown = 0.2f;
+
+    private NetworkIdentity netIdentity;
+    private Rigidbody rb;
+    private SteamId currentAuthority;
+    private float nextSendTime;
+    private float lastHandoffTime;
+
+    // Interpolation state
+    private Vector3 targetPosition;
+    private Quaternion targetRotation;
+    private Vector3 targetVelocity;
+    private Vector3 targetAngularVelocity;
+    private float lastReceiveTime;
+
+    private void Awake()
+    {
+        netIdentity = GetComponent<NetworkIdentity>();
+        rb = GetComponent<Rigidbody>();
+
+        // Register network message handlers
+        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PhysicsSync, OnReceivePhysicsSync);
+    }
+
+    private void FixedUpdate()
+    {
+        // Send/receive logic based on authority
+        if (IsAuthority())
+        {
+            // Send state at fixed rate
+            if (Time.time >= nextSendTime)
+            {
+                SendPhysicsState();
+                nextSendTime = Time.time + (1f / sendRate);
+            }
+        }
+        else
+        {
+            // Interpolate to received state
+            InterpolateToTarget();
+        }
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        // Request authority on player collision
+        if (collision.gameObject.CompareTag("Player"))
+        {
+            SteamId colliderId = GetPlayerSteamId(collision.gameObject);
+            if (colliderId != 0 && Time.time - lastHandoffTime > authorityHandoffCooldown)
+            {
+                RequestAuthority(colliderId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the local player is the authority for this object.
+    /// </summary>
+    private bool IsAuthority()
+    {
+        // Authority check
+        return currentAuthority == SteamManager.Instance.PlayerSteamId;
+    }
+
+    /// <summary>
+    /// Requests authority transfer to a new player (deterministic tie-breaking).
+    /// </summary>
+    private void RequestAuthority(SteamId newAuthority)
+    {
+        // Deterministic: higher SteamId wins
+        if (newAuthority > currentAuthority || currentAuthority == 0)
+        {
+            currentAuthority = newAuthority;
+            lastHandoffTime = Time.time;
+        }
+    }
+
+    /// <summary>
+    /// Sends the current physics state to all peers.
+    /// </summary>
+    private void SendPhysicsState()
+    {
+        // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(12)][Vel(12)][AngVel(12)]
+        byte[] packet = new byte[61];
+        int offset = 0;
+        
+        packet[offset++] = (byte)NetworkMessageType.PhysicsSync;
+        NetworkSerialization.WriteUInt(packet, ref offset, netIdentity.NetworkId);
+        NetworkSerialization.WriteULong(packet, ref offset, currentAuthority);
+        NetworkSerialization.WriteVector3(packet, ref offset, rb.position);
+        NetworkSerialization.WriteQuaternion(packet, ref offset, rb.rotation);
+        NetworkSerialization.WriteVector3(packet, ref offset, rb.linearVelocity);
+        NetworkSerialization.WriteVector3(packet, ref offset, rb.angularVelocity);
+        
+        NetworkConnectionManager.Instance.SendToAll(packet, 1, P2PSend.UnreliableNoDelay);
+    }
+
+    /// <summary>
+    /// Handles incoming physics sync packets.
+    /// </summary>
+    private void OnReceivePhysicsSync(SteamId sender, byte[] data)
+    {
+        // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(12)][Vel(12)][AngVel(12)]
+        int offset = 0;
+        uint netId = NetworkSerialization.ReadUInt(data, ref offset);
+        
+        if (netId != netIdentity.NetworkId) return;
+        
+        SteamId authSteamId = NetworkSerialization.ReadULong(data, ref offset);
+        currentAuthority = authSteamId;
+        
+        if (!IsAuthority())
+        {
+            targetPosition = NetworkSerialization.ReadVector3(data, ref offset);
+            targetRotation = NetworkSerialization.ReadQuaternion(data, ref offset);
+            targetVelocity = NetworkSerialization.ReadVector3(data, ref offset);
+            targetAngularVelocity = NetworkSerialization.ReadVector3(data, ref offset);
+            lastReceiveTime = Time.time;
+        }
+    }
+
+    /// <summary>
+    /// Interpolates/extrapolates to the received physics state.
+    /// </summary>
+    private void InterpolateToTarget()
+    {
+        float timeSinceReceive = Time.time - lastReceiveTime;
+        
+        // Extrapolate with velocity
+        Vector3 extrapolatedPos = targetPosition + targetVelocity * timeSinceReceive;
+        
+        rb.position = Vector3.Lerp(rb.position, extrapolatedPos, Time.deltaTime * 10f);
+        rb.rotation = Quaternion.Slerp(rb.rotation, targetRotation, Time.deltaTime * 10f);
+        rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, targetVelocity, Time.deltaTime * 5f);
+        rb.angularVelocity = Vector3.Lerp(rb.angularVelocity, targetAngularVelocity, Time.deltaTime * 5f);
+    }
+
+    /// <summary>
+    /// Gets the SteamId of a player from their GameObject.
+    /// </summary>
+    private SteamId GetPlayerSteamId(GameObject playerObject)
+    {
+        // Try to get NetworkIdentity from player object
+        var identity = playerObject.GetComponent<NetworkIdentity>();
+        if (identity != null)
+        {
+            return identity.OwnerSteamId;
+        }
+        
+        // Fallback: return local player if it's the local player's object
+        return SteamManager.Instance?.PlayerSteamId ?? default;
+    }
+}

@@ -328,7 +328,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 700579777}
   m_HandleRect: {fileID: 700579776}
   m_Direction: 0
-  m_Value: 0
+  m_Value: 1
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
@@ -384,7 +384,9 @@ GameObject:
   - component: {fileID: 242615937}
   - component: {fileID: 242615936}
   - component: {fileID: 242615935}
-  - component: {fileID: 242615934}
+  - component: {fileID: 242615941}
+  - component: {fileID: 242615940}
+  - component: {fileID: 242615939}
   m_Layer: 0
   m_Name: Cube
   m_TagString: Untagged
@@ -392,22 +394,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &242615934
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 242615933}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 18ef337cbc35d432e82624f6afb7f9eb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::P2PGameObject
-  periodicPayload: heartbeat
-  periodicIntervalSeconds: 0.4
-  droppedRetryIntervalSeconds: 1.25
-  receivePollIntervalSeconds: 0.05
 --- !u!65 &242615935
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -495,12 +481,66 @@ Transform:
   m_GameObject: {fileID: 242615933}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2.62, y: 0, z: -4.91}
+  m_LocalPosition: {x: -3.42, y: 2.53, z: -4.91}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &242615939
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 242615933}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4792af784f3a64470b9cfed1f56f501f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkPhysicsObject
+  sendRate: 10
+  authorityHandoffCooldown: 0.2
+--- !u!54 &242615940
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 242615933}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
+--- !u!114 &242615941
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 242615933}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 195a96f8ceb994cee9bfb442e1ec44ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkIdentity
+  networkId: 0
 --- !u!1 &499134795
 GameObject:
   m_ObjectHideFlags: 0
@@ -713,6 +753,67 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 516808244}
   m_CullTransparentMesh: 1
+--- !u!1001 &552721842
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -1.17887
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -9.05115
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2231938572761584968, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: m_Name
+      value: SteamPack
+      objectReference: {fileID: 0}
+    - target: {fileID: 7202338266808824058, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: playerPrefab
+      value: 
+      objectReference: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
 --- !u!1 &700579775
 GameObject:
   m_ObjectHideFlags: 0
@@ -1353,7 +1454,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 516808246}
   m_HandleRect: {fileID: 516808245}
   m_Direction: 2
-  m_Value: 1
+  m_Value: 0
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
@@ -1710,3 +1811,4 @@ SceneRoots:
   - {fileID: 12047067}
   - {fileID: 1574074799}
   - {fileID: 242615938}
+  - {fileID: 552721842}
