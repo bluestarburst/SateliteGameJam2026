@@ -58,6 +58,7 @@ public class SpacePlayerControl : MonoBehaviour
     private bool needsAlignment = true;
 
     private Vector3 lastNormal = Vector3.up;
+    private Quaternion storeAngle = Quaternion.identity;
     public void Rotation()
     {
         bool justLanded = !wasGrounded && isGrounded;
@@ -70,31 +71,38 @@ public class SpacePlayerControl : MonoBehaviour
 
         if (!justLanded && lastNormal != groundAvgNormal)
         {
-            needsAlignment = Vector3.Distance(transform.up, groundAvgNormal) > 0.001f;
+            // needsAlignment = Vector3.Distance(transform.up, groundAvgNormal) > 0.001f;
+            // get the relative world rotation between lastNormal and groundAvgNormal for rotating the camera that amount
+            storeAngle = Quaternion.FromToRotation(lastNormal, groundAvgNormal);
+            // start a coroutine to rotate the camera by this rotation quaternion over time 
+            StartCoroutine(RotateOverTime(storeAngle, 0.5f)); // rotate over 0.5 seconds
             lastNormal = groundAvgNormal;
         }
 
-        if (needsAlignment)
-        {
-            // STANDARD WALKING ALIGNMENT (Same as before)
-            Vector3 projectedForward = Vector3.ProjectOnPlane(transform.forward, groundAvgNormal).normalized;
+        // if (needsAlignment)
+        // {
 
-            if (projectedForward.sqrMagnitude < 0.001f)
-            {
-                projectedForward = Vector3.ProjectOnPlane(transform.up, groundAvgNormal).normalized;
-            }
+        //     // STANDARD WALKING ALIGNMENT (Same as before)
+        //     Vector3 projectedForward = Vector3.ProjectOnPlane(transform.forward, groundAvgNormal).normalized;
 
-            if (projectedForward.sqrMagnitude > 0.001f)
-            {
-                Quaternion targetRotation = Quaternion.LookRotation(projectedForward, groundAvgNormal);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
-            }
+        //     if (projectedForward.sqrMagnitude < 0.001f)
+        //     {
+        //         projectedForward = Vector3.ProjectOnPlane(transform.up, groundAvgNormal).normalized;
+        //     }
 
-            if (Vector3.Distance(transform.up, groundAvgNormal) <= 0.001f)
-            {
-                needsAlignment = false;
-            }
-        }
+        //     if (projectedForward.sqrMagnitude > 0.001f)
+        //     {
+        //         Quaternion targetRotation = Quaternion.LookRotation(projectedForward, groundAvgNormal);
+        //         transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
+        //     }
+
+
+        //     // Rotate the transform by the stored angle over time
+        //     if (Vector3.Distance(transform.up, groundAvgNormal) <= 0.001f)
+        //     {
+        //         needsAlignment = false;
+        //     }
+        // }
 
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
 
@@ -116,6 +124,46 @@ public class SpacePlayerControl : MonoBehaviour
         // Apply relative rotation to the camera
         playerCamera.transform.Rotate(-mouseInput.y * sensitivity * Time.deltaTime, mouseInput.x * sensitivity * Time.deltaTime, currentRoll * rollSpeed * Time.deltaTime, Space.Self);
 
+    }
+
+    // Nicholas was right from the start lol
+    // Smoothly applies a fraction of a relative rotation to the camera over a fixed duration.
+    // The rotation is applied incrementally (additive), so there is no fixed end orientation.
+    private System.Collections.IEnumerator RotateOverTime(Quaternion rotationAmount, float duration, float fraction = 1f)
+    {
+        // Clamp fraction to [0,1] and compute the fractional target delta
+        float clampedFraction = Mathf.Clamp01(fraction);
+        Quaternion targetDelta = Quaternion.Slerp(Quaternion.identity, rotationAmount, clampedFraction);
+
+        // Immediate application if duration is non-positive
+        if (duration <= 0f)
+        {
+            playerCamera.transform.rotation = targetDelta * playerCamera.transform.rotation;
+            yield break;
+        }
+
+        float elapsed = 0f;
+        float lastElapsed = 0f;
+
+        // Apply incremental delta each frame so that it adds onto the current rotation
+        while (elapsed < duration)
+        {
+            yield return null;
+            elapsed += Time.deltaTime;
+            if (elapsed > duration) elapsed = duration;
+
+            // Cumulative rotation up to current time and previous frame
+            Quaternion cumulative = Quaternion.Slerp(Quaternion.identity, targetDelta, elapsed / duration);
+            Quaternion previous = Quaternion.Slerp(Quaternion.identity, targetDelta, lastElapsed / duration);
+
+            // Frame delta is the difference between cumulative and previous
+            Quaternion frameDelta = cumulative * Quaternion.Inverse(previous);
+
+            // Apply relative rotation (additive) to the camera
+            playerCamera.transform.rotation = frameDelta * playerCamera.transform.rotation;
+
+            lastElapsed = elapsed;
+        }
     }
 
     private Vector3 jumpXZDirection = Vector3.zero;
