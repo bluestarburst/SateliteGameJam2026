@@ -11,16 +11,22 @@ public class UnrankedLobbiesView : MonoBehaviour
     [SerializeField] private RectTransform contentRoot;   // Assign ScrollView content transform
     [SerializeField] private Button lobbyItemButtonPrefab; // Assign a Button prefab with a Text child
     [SerializeField] private bool autoRefreshOnEnable = true;
+    [SerializeField] private float refreshInterval = 30f;
+    [SerializeField] private string LobbyScene = "LobbyScene";
 
     [Header("Optional")]
     [SerializeField] private string emptyStateMessage = "No lobbies found";
 
-    private void OnEnable()
+    private void Start()
     {
-        if (autoRefreshOnEnable)
+        if (SteamManager.Instance == null || !SteamManager.Instance.ConnectedToSteam())
         {
-            RefreshList();
+            Debug.Log("Steam not initialized; cannot display lobbies.");
+            return;
         }
+
+        // create repeating refresh every 30 seconds
+        InvokeRepeating(nameof(RefreshList), 0f, 5f);
     }
 
     public async void RefreshList()
@@ -65,7 +71,7 @@ public class UnrankedLobbiesView : MonoBehaviour
         }
 
         var btn = Instantiate(lobbyItemButtonPrefab, contentRoot);
-        string ownerName = lobby.Owner.Name ?? "Host";
+        string ownerName = lobby.GetData("owner_name") ?? lobby.Owner.Name;
         int memberCount = lobby.MemberCount;
         int maxMembers = lobby.MaxMembers;
 
@@ -112,6 +118,9 @@ public class UnrankedLobbiesView : MonoBehaviour
         try { SteamNetworking.AcceptP2PSessionWithUser(lobby.Owner.Id); } catch { }
 
         Debug.Log($"Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}");
+
+        // go to lobby scene
+        UnityEngine.SceneManagement.SceneManager.LoadScene(LobbyScene);
     }
 
     private void ClearContent()
