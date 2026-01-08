@@ -6,10 +6,10 @@ using UnityEngine;
 
 /// <summary>
 /// Voice chat over Steam P2P using Facepunch Steamworks.
-/// Records voice, compresses it, sends via P2P channel, then decompresses and plays on remote clients.
-/// Attach to a GameObject in your gameplay scene alongside P2PGameObject.
+/// Records voice once, compresses it, and sends to all connected peers.
+/// Routes incoming voice to per-sender VoiceRemotePlayer components for playback.
+/// Attach to a GameObject in your gameplay scene.
 /// </summary>
-[RequireComponent(typeof(AudioSource))]
 public class VoiceChatP2P : MonoBehaviour
 {
     [Header("Voice Settings")]
@@ -17,54 +17,14 @@ public class VoiceChatP2P : MonoBehaviour
     [SerializeField] private bool alwaysRecord = false; // For testing; use push-to-talk in production
     [SerializeField] private int voiceChannel = 2; // Separate P2P channel for voice data
 
-    [Header("Playback")]
-    [SerializeField] private float playbackLatencySeconds = 0.1f; // Buffer before playback starts
-
-    private AudioSource audioSource;
     private MemoryStream voiceStream;
-    private MemoryStream uncompressedStream;
-    private MemoryStream compressedStream;
-
-    // Audio playback buffers
-    private float[] audioclipBuffer;
-    private int audioclipBufferSize;
-    private int audioPlayerPosition;
-    private int playbackBuffer;
-
-    private Queue<PendingAudioBuffer> pendingBuffers = new();
-
-    private SteamId OpponentId => SteamManager.Instance != null ? SteamManager.Instance.OpponentSteamId : default;
+    private Dictionary<SteamId, VoiceRemotePlayer> remoteVoicePlayers = new();
+    
     private bool isLocalPlayerActive => SteamManager.Instance != null && !SteamManager.Instance.LobbyPartnerDisconnected;
-
-    private class PendingAudioBuffer
-    {
-        public float ReadTime { get; set; }
-        public byte[] Buffer { get; set; }
-        public int Size { get; set; }
-    }
 
     private void Awake()
     {
-        audioSource = GetComponent<AudioSource>();
-        if (audioSource == null)
-        {
-            Debug.LogError("VoiceChatP2P requires an AudioSource component.");
-            enabled = false;
-            return;
-        }
-
         voiceStream = new MemoryStream();
-        uncompressedStream = new MemoryStream();
-        compressedStream = new MemoryStream();
-
-        // Setup playback
-        int optimalRate = (int)SteamUser.OptimalSampleRate;
-        audioclipBufferSize = optimalRate * 5; // 5 seconds buffer
-        audioclipBuffer = new float[audioclipBufferSize];
-
-        audioSource.clip = AudioClip.Create("VoiceData", optimalRate * 2, 1, optimalRate, true, OnAudioRead, null);
-        audioSource.loop = true;
-        audioSource.Play();
     }
 
     private void Update()
@@ -100,84 +60,104 @@ public class VoiceChatP2P : MonoBehaviour
                 HandleIncomingVoicePacket(packet.Value.Data, packet.Value.Data.Length);
             }
         }
-
-        // Playback: process pending buffers when it's time
-        while (pendingBuffers.Count > 0 && pendingBuffers.Peek().ReadTime <= Time.time)
-        {
-            var pending = pendingBuffers.Dequeue();
-            WriteToPlaybackBuffer(pending.Buffer, pending.Size);
-        }
     }
 
     private void SendVoicePacket(byte[] compressed, int length)
     {
-        bool sent = SteamNetworking.SendP2PPacket(OpponentId, compressed, length, voiceChannel, P2PSend.UnreliableNoDelay);
-        if (!sent)
+        if (SteamManager.Instance?.currentLobby == null) return;
+        
+        // Prepend local player SteamId to packet
+        byte[] packet = new byte[8 + length];
+        System.Buffer.BlockCopy(BitConverter.GetBytes(SteamManager.Instance.PlayerSteamId.Value), 0, packet, 0, 8);
+        System.Buffer.BlockCopy(compressed, 0, packet, 8, length);
+        
+        // Fan out to all peers
+        foreach (var member in SteamManager.Instance.currentLobby.Members)
         {
-            Debug.Log("Failed to send voice packet");
-        }
-    }
-
-    private void HandleIncomingVoicePacket(byte[] compressed, int length)
-    {
-        try
-        {
-            compressedStream.Position = 0;
-            compressedStream.Write(compressed, 0, length);
-            compressedStream.Position = 0;
-
-            uncompressedStream.Position = 0;
-            int uncompressedWritten = SteamUser.DecompressVoice(compressedStream, length, uncompressedStream);
-
-            if (uncompressedWritten > 0)
+            if (member.Id != SteamManager.Instance.PlayerSteamId)
             {
-                // Copy to avoid shared buffer issues
-                byte[] outputBuffer = new byte[uncompressedWritten];
-                uncompressedStream.Position = 0;
-                uncompressedStream.Read(outputBuffer, 0, uncompressedWritten);
-
-                // Queue for playback with latency buffer
-                pendingBuffers.Enqueue(new PendingAudioBuffer
+                bool sent = SteamNetworking.SendP2PPacket(member.Id, packet, packet.Length, voiceChannel, P2PSend.UnreliableNoDelay);
+                if (!sent)
                 {
-                    ReadTime = Time.time + playbackLatencySeconds,
-                    Buffer = outputBuffer,
-                    Size = uncompressedWritten
-                });
+                    Debug.LogWarning($"Failed to send voice to {member.Name}");
+                }
             }
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"Failed to process incoming voice packet: {e}");
-        }
     }
 
-    private void WriteToPlaybackBuffer(byte[] uncompressed, int size)
+    private void HandleIncomingVoicePacket(byte[] data, int length)
     {
-        // Convert 16-bit PCM bytes to float samples
-        for (int i = 0; i < size; i += 2)
+        if (length < 8) return; // Need at least SteamId
+        
+        // Extract sender SteamId
+        ulong senderValue = BitConverter.ToUInt64(data, 0);
+        SteamId senderId = new SteamId { Value = senderValue };
+        
+        // Get or create VoiceRemotePlayer for this sender
+        if (!remoteVoicePlayers.TryGetValue(senderId, out var remotePlayer))
         {
-            if (i + 1 >= size) break;
-
-            short sample = (short)(uncompressed[i] | (uncompressed[i + 1] << 8));
-            audioclipBuffer[audioPlayerPosition] = sample / 32767.0f;
-
-            audioPlayerPosition = (audioPlayerPosition + 1) % audioclipBufferSize;
-            playbackBuffer++;
-        }
-    }
-
-    private void OnAudioRead(float[] data)
-    {
-        for (int i = 0; i < data.Length; ++i)
-        {
-            data[i] = 0; // Start with silence
-
-            if (playbackBuffer > 0)
+            remotePlayer = CreateRemoteVoicePlayer(senderId);
+            if (remotePlayer != null)
             {
-                int readPosition = (audioPlayerPosition - playbackBuffer + audioclipBufferSize) % audioclipBufferSize;
-                data[i] = audioclipBuffer[readPosition];
-                playbackBuffer--;
+                remoteVoicePlayers[senderId] = remotePlayer;
             }
+            else
+            {
+                return; // Could not create player
+            }
+        }
+        
+        // Forward compressed data (skip SteamId header)
+        byte[] compressedData = new byte[length - 8];
+        System.Buffer.BlockCopy(data, 8, compressedData, 0, length - 8);
+        remotePlayer.ReceiveVoiceData(compressedData, compressedData.Length);
+    }
+
+    private VoiceRemotePlayer CreateRemoteVoicePlayer(SteamId senderId)
+    {
+        // Find remote player's avatar by SteamId
+        GameObject remoteAvatar = FindRemotePlayerAvatar(senderId);
+        if (remoteAvatar == null)
+        {
+            // Fallback: create empty GameObject
+            remoteAvatar = new GameObject($"RemoteVoice_{senderId}");
+            remoteAvatar.AddComponent<AudioSource>();
+        }
+        
+        var remotePlayer = remoteAvatar.GetComponent<VoiceRemotePlayer>();
+        if (remotePlayer == null)
+        {
+            remotePlayer = remoteAvatar.AddComponent<VoiceRemotePlayer>();
+        }
+        
+        remotePlayer.Initialize(senderId);
+        return remotePlayer;
+    }
+
+    private GameObject FindRemotePlayerAvatar(SteamId steamId)
+    {
+        // Try to find an existing remote player GameObject
+        // This would typically query your player manager or find by NetworkIdentity
+        var allIdentities = FindObjectsByType<NetworkIdentity>(FindObjectsSortMode.None);
+        foreach (var identity in allIdentities)
+        {
+            if (identity.OwnerSteamId == steamId && identity.CompareTag("Player"))
+            {
+                return identity.gameObject;
+            }
+        }
+        return null;
+    }
+
+    public void RemoveRemotePlayer(SteamId steamId)
+    {
+        if (remoteVoicePlayers.TryGetValue(steamId, out var remotePlayer))
+        {
+            if (remotePlayer != null)
+            {
+                Destroy(remotePlayer.gameObject);
+            }
+            remoteVoicePlayers.Remove(steamId);
         }
     }
 
@@ -185,7 +165,5 @@ public class VoiceChatP2P : MonoBehaviour
     {
         SteamUser.VoiceRecord = false;
         voiceStream?.Dispose();
-        uncompressedStream?.Dispose();
-        compressedStream?.Dispose();
     }
 }
