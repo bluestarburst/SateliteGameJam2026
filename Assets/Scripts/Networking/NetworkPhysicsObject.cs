@@ -11,6 +11,7 @@ public class NetworkPhysicsObject : MonoBehaviour
 {
     [SerializeField] private float sendRate = 10f; // Hz
     [SerializeField] private float authorityHandoffCooldown = 0.2f;
+    [SerializeField] private bool editorRequestAuthority = false; // For testing in editor
 
     private NetworkIdentity netIdentity;
     private Rigidbody rb;
@@ -25,6 +26,12 @@ public class NetworkPhysicsObject : MonoBehaviour
     private Vector3 targetAngularVelocity;
     private float lastReceiveTime;
 
+    [ContextMenu("Perform Action")]
+    void MyAction()
+    {
+        Debug.Log("Action performed!");
+    }
+
     private void Awake()
     {
         netIdentity = GetComponent<NetworkIdentity>();
@@ -36,6 +43,11 @@ public class NetworkPhysicsObject : MonoBehaviour
 
     private void FixedUpdate()
     {
+        if (editorRequestAuthority)
+        {
+            RequestAuthority(SteamManager.Instance.PlayerSteamId);
+            editorRequestAuthority = false;
+        }
         // Send/receive logic based on authority
         if (IsAuthority())
         {

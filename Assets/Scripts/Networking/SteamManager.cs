@@ -23,6 +23,7 @@ public class SteamManager : MonoBehaviour
     [Header("Scenes & Flow")]
     [Tooltip("Optional scene to load when a lobby is ready.")]
     [SerializeField] private string gameSceneName = string.Empty;
+    [SerializeField] private bool autoCreateLobbyForTesting = false;
     
     private int playerElo = 0;
 
@@ -159,6 +160,11 @@ public class SteamManager : MonoBehaviour
         SceneManager.sceneLoaded += OnSceneLoaded;
 
         UpdateRichPresenceStatus(SceneManager.GetActiveScene().name);
+
+        if (autoCreateLobbyForTesting)
+        {
+            CreateLobby(0);
+        }
     }
 
     private void Update()
@@ -414,11 +420,11 @@ public class SteamManager : MonoBehaviour
         remoteMembers.Clear();
     }
 
-    public async Task<bool> CreateFriendLobby()
+    public async Task<bool> CreateFriendLobby(int maxPlayers = 4)
     {
         try
         {
-            var createLobbyOutput = await SteamMatchmaking.CreateLobbyAsync(2);
+            var createLobbyOutput = await SteamMatchmaking.CreateLobbyAsync(maxPlayers);
             if (!createLobbyOutput.HasValue)
             {
                 Debug.Log("Lobby created but not correctly instantiated");
@@ -443,11 +449,11 @@ public class SteamManager : MonoBehaviour
         }
     }
 
-    public async Task<bool> CreateLobby(int lobbyParameters)
+    public async Task<bool> CreateLobby(int lobbyParameters, int maxPlayers = 4)
     {
         try
         {
-            var createLobbyOutput = await SteamMatchmaking.CreateLobbyAsync(2);
+            var createLobbyOutput = await SteamMatchmaking.CreateLobbyAsync(maxPlayers);
             if (!createLobbyOutput.HasValue)
             {
                 Debug.Log("Lobby created but not correctly instantiated");
