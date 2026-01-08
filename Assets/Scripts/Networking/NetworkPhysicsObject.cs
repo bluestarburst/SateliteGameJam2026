@@ -41,6 +41,15 @@ public class NetworkPhysicsObject : MonoBehaviour
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PhysicsSync, OnReceivePhysicsSync);
     }
 
+    private void Start()
+    {
+        // set initial target state to current state
+        targetPosition = rb.position;
+        targetRotation = rb.rotation;
+        targetVelocity = rb.linearVelocity;
+        targetAngularVelocity = rb.angularVelocity;
+    }
+
     private void FixedUpdate()
     {
         if (editorRequestAuthority)
@@ -105,11 +114,12 @@ public class NetworkPhysicsObject : MonoBehaviour
     /// </summary>
     private void SendPhysicsState()
     {
-        // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(12)][Vel(12)][AngVel(12)]
-        byte[] packet = new byte[61];
-        int offset = 0;
+        // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(16)][Vel(12)][AngVel(12)]
+        const int packetSize = 65;
+        byte[] packet = new byte[packetSize];
+        packet[0] = (byte)NetworkMessageType.PhysicsSync;
+        int offset = 1;
         
-        packet[offset++] = (byte)NetworkMessageType.PhysicsSync;
         NetworkSerialization.WriteUInt(packet, ref offset, netIdentity.NetworkId);
         NetworkSerialization.WriteULong(packet, ref offset, currentAuthority);
         NetworkSerialization.WriteVector3(packet, ref offset, rb.position);
@@ -125,8 +135,15 @@ public class NetworkPhysicsObject : MonoBehaviour
     /// </summary>
     private void OnReceivePhysicsSync(SteamId sender, byte[] data)
     {
-        // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(12)][Vel(12)][AngVel(12)]
-        int offset = 0;
+        // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(16)][Vel(12)][AngVel(12)]
+        const int expectedLength = 65;
+        if (data == null || data.Length < expectedLength)
+        {
+            Debug.LogWarning($"PhysicsSync packet too small ({data?.Length ?? 0}/{expectedLength})");
+            return;
+        }
+
+        int offset = 1;
         uint netId = NetworkSerialization.ReadUInt(data, ref offset);
         
         if (netId != netIdentity.NetworkId) return;

@@ -105,6 +105,12 @@ public class NetworkInteractionState : MonoBehaviour
     private void OnReceivePickup(SteamId sender, byte[] data)
     {
         // Packet deserialization and ownership update
+        const int expectedLength = 13;
+        if (data == null || data.Length < expectedLength)
+        {
+            Debug.LogWarning($"InteractionPickup packet too small ({data?.Length ?? 0}/{expectedLength})");
+            return;
+        }
 
         int offset = 1;
         uint netId = NetworkSerialization.ReadUInt(data, ref offset);
@@ -123,6 +129,13 @@ public class NetworkInteractionState : MonoBehaviour
     private void OnReceiveDrop(SteamId sender, byte[] data)
     {
         // Packet deserialization and object placement
+        const int expectedLength = 37;
+        if (data == null || data.Length < expectedLength)
+        {
+            Debug.LogWarning($"InteractionDrop packet too small ({data?.Length ?? 0}/{expectedLength})");
+            return;
+        }
+
         int offset = 1;
         uint netId = NetworkSerialization.ReadUInt(data, ref offset);
         if (netId != netIdentity.NetworkId) return;
@@ -147,6 +160,13 @@ public class NetworkInteractionState : MonoBehaviour
     private void OnReceiveUse(SteamId sender, byte[] data)
     {
         // Packet deserialization and use callback
+        const int expectedLength = 13;
+        if (data == null || data.Length < expectedLength)
+        {
+            Debug.LogWarning($"InteractionUse packet too small ({data?.Length ?? 0}/{expectedLength})");
+            return;
+        }
+
         int offset = 1;
         uint netId = NetworkSerialization.ReadUInt(data, ref offset);
         if (netId != netIdentity.NetworkId) return;

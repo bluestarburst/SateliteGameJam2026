@@ -20,9 +20,10 @@ public class NetworkTransformSync : MonoBehaviour
     
     // Interpolation state
     private Vector3 targetPosition;
-    private Quaternion targetRotation;
+    private Quaternion targetRotation = Quaternion.identity;
     private Vector3 targetVelocity;
     private float lastReceiveTime;
+    private bool hasReceivedState;
     
     private void Awake()
     {
@@ -63,11 +64,12 @@ public class NetworkTransformSync : MonoBehaviour
     /// </summary>
     private void SendTransformState()
     {
-       // Packet: [Type(1)][NetId(4)][OwnerSteamId(8)][Pos(12)][Rot(12)][Vel(12)]
-        byte[] packet = new byte[49];
-        int offset = 0;
+       // Packet: [Type(1)][NetId(4)][OwnerSteamId(8)][Pos(12)][Rot(16)][Vel(12)]
+        const int packetSize = 53;
+        byte[] packet = new byte[packetSize];
+        packet[0] = (byte)NetworkMessageType.TransformSync;
+        int offset = 1;
         
-        packet[offset++] = (byte)NetworkMessageType.TransformSync;
         NetworkSerialization.WriteUInt(packet, ref offset, netIdentity.NetworkId);
         NetworkSerialization.WriteULong(packet, ref offset, netIdentity.OwnerSteamId);
         NetworkSerialization.WriteVector3(packet, ref offset, transform.position);
@@ -83,6 +85,13 @@ public class NetworkTransformSync : MonoBehaviour
     private void OnReceiveTransformSync(SteamId sender, byte[] data)
     {
         // Packet deserialization and state update
+        const int expectedLength = 53;
+        if (data == null || data.Length < expectedLength)
+        {
+            Debug.LogWarning($"TransformSync packet too small ({data?.Length ?? 0}/{expectedLength})");
+            return;
+        }
+
         int offset = 1;
         uint netId = NetworkSerialization.ReadUInt(data, ref offset);
         if (netId != netIdentity.NetworkId) return;
@@ -96,6 +105,7 @@ public class NetworkTransformSync : MonoBehaviour
             targetRotation = NetworkSerialization.ReadQuaternion(data, ref offset);
             targetVelocity = NetworkSerialization.ReadVector3(data, ref offset);
             lastReceiveTime = Time.time;
+            hasReceivedState = true;
         }
     }
     
@@ -104,6 +114,11 @@ public class NetworkTransformSync : MonoBehaviour
     /// </summary>
     private void InterpolateToTarget()
     {
+        if (!hasReceivedState)
+        {
+            return;
+        }
+
         // Smooth interpolation with extrapolation
         if (syncPosition)
         {

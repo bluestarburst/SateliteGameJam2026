@@ -47,6 +47,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SteamManager
   gameAppId: 480
   gameSceneName: Lobby
+  autoCreateLobbyForTesting: 1
 --- !u!114 &7202338266808824058
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -59,3 +60,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a634b192b792043b786e244380eceb8a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkConnectionManager
+  channelsToPoll: 000000000100000003000000
+  autoSpawnPlayer: 1
+  playerPrefab: {fileID: 0}
