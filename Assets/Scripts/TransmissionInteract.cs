@@ -10,4 +10,8 @@ public class TransmissionInteract : MonoBehaviour, IInteractable
         if (answeringTransmission) interactor.restrictMovementTo(transform.position, tetherDistance);
         else interactor.releaseMovement();
     }
+
+    public void OnScroll(GroundPlayerInteractor interactor, float vertical) {
+        //nothing
+    }
 }

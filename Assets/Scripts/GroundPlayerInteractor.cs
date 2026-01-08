@@ -3,11 +3,13 @@ using UnityEngine.InputSystem;
 
 interface IInteractable {
     public void Interact(GroundPlayerInteractor interactor);
+    public void OnScroll(GroundPlayerInteractor interactor, float vertical);
 }
 
 public class GroundPlayerInteractor : MonoBehaviour
 {
     public InputActionReference InteractAction;
+    public InputActionReference ScrollAction;
     public Transform InteractorSource;
     public float InteractRange;
     
@@ -27,6 +29,20 @@ public class GroundPlayerInteractor : MonoBehaviour
             if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
                 if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
                     interactObj.Interact(this);
+                }
+            }
+        }
+
+        Vector2 scrollDelta = ScrollAction.action.ReadValue<Vector2>();
+        if (scrollDelta != Vector2.zero)
+        {
+            float vertical = scrollDelta.y;
+
+            // Debug.Log("Scroll " + (vertical > 0 ? "UP" : "DOWN") + " detected");
+            Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
+            if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
+                if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
+                    interactObj.OnScroll(this, vertical);
                 }
             }
         }

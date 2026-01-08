@@ -1,11 +1,12 @@
 using UnityEngine;
 
-public class KeyboardInteract : MonoBehaviour, IInteractable
+public class FileCrateInteract : MonoBehaviour, IInteractable
 {
     public void Interact(GroundPlayerInteractor interactor) {
-        Debug.Log(Random.Range(0, 100));
-    }
-    public void OnScroll(GroundPlayerInteractor interactor, float vertical) {
         //nothing
+    }
+
+    public void OnScroll(GroundPlayerInteractor interactor, float vertical) {
+        Debug.Log(vertical > 0 ? "Forward" : "backward");
     }
 }
