@@ -124,6 +124,7 @@ public class VoiceRemotePlayer : MonoBehaviour
     
     private void OnDestroy()
     {
+        Debug.Log($"Cleaning up VoiceRemotePlayer for {senderSteamId}");
         uncompressedStream?.Dispose();
     }
     

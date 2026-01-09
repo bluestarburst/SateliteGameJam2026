@@ -185,6 +185,9 @@ public class NetworkConnectionManager : MonoBehaviour
         if (spawnedRemotePlayers.ContainsKey(steamId)) return;
 
         var instance = Instantiate(playerPrefab);
+
+        DontDestroyOnLoad(instance);
+
         instance.name = string.IsNullOrEmpty(displayName)
             ? $"RemotePlayer_{steamId}"
             : $"RemotePlayer_{displayName}";
@@ -193,6 +196,7 @@ public class NetworkConnectionManager : MonoBehaviour
         if (identity != null)
         {
             identity.SetOwner(steamId);
+            identity.SetNetworkId((uint)steamId.Value); // Use SteamId as network ID for simplicity
         }
 
         spawnedRemotePlayers[steamId] = instance;

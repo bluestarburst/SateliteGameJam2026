@@ -551,6 +551,7 @@ public class SteamManager : MonoBehaviour
     private void TryAutoSpawnRemotePlayer(SteamId steamId, string displayName)
     {
         if (NetworkConnectionManager.Instance == null) return;
+        Debug.Log($"Attempting to spawn remote player for {steamId} ({displayName})");
         NetworkConnectionManager.Instance.SpawnRemotePlayerFor(steamId, displayName);
     }
 

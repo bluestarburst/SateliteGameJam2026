@@ -25,6 +25,7 @@ public class VoiceChatP2P : MonoBehaviour
     public bool isTalking => SteamUser.HasVoiceData;
     public bool isRecording => SteamUser.VoiceRecord;
     public bool isSending = false;
+    public bool pressingButton => pushToTalkAction.IsPressed();
     
     private bool isLocalPlayerActive => SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount <= 1;
 
@@ -39,8 +40,10 @@ public class VoiceChatP2P : MonoBehaviour
         if (isLocalPlayerActive)
         {
             // remove legacy getKey
-            bool shouldRecord = alwaysRecord || pushToTalkAction.ReadValue<float>() > 0;
+            bool shouldRecord = alwaysRecord || pushToTalkAction.IsPressed();
             SteamUser.VoiceRecord = shouldRecord;
+
+
 
             if (SteamUser.HasVoiceData)
             {
@@ -175,6 +178,7 @@ public class VoiceChatP2P : MonoBehaviour
 
     private void OnDestroy()
     {
+        Debug.Log("Cleaning up VoiceChatP2P");
         SteamUser.VoiceRecord = false;
         voiceStream?.Dispose();
     }
