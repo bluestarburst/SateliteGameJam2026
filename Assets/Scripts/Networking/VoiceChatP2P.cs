@@ -4,6 +4,7 @@ using System.IO;
 using Steamworks;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 
 /// <summary>
 /// Voice chat over Steam P2P using Facepunch Steamworks.
@@ -15,7 +16,7 @@ public class VoiceChatP2P : MonoBehaviour
 {
     [Header("Voice Settings")]
     // [SerializeField] private KeyCode pushToTalkKey = KeyCode.V;
-    [SerializeField] private InputAction pushToTalkAction;
+    [SerializeField] private Key pushToTalkAction = Key.V;
     [SerializeField] private bool alwaysRecord = false; // For testing; use push-to-talk in production
     [SerializeField] private int voiceChannel = 2; // Separate P2P channel for voice data
 
@@ -40,9 +41,9 @@ public class VoiceChatP2P : MonoBehaviour
         if (isLocalPlayerActive)
         {
             // remove legacy getKey
-            bool shouldRecord = alwaysRecord || pushToTalkAction.IsPressed();
+            bool shouldRecord = alwaysRecord || Keyboard.current[pushToTalkAction].isPressed;
             SteamUser.VoiceRecord = shouldRecord;
-            pressingButton = pushToTalkAction.IsPressed();
+            pressingButton = Keyboard.current[pushToTalkAction].isPressed;
 
             if (SteamUser.HasVoiceData)
             {
