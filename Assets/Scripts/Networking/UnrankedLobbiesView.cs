@@ -111,8 +111,6 @@ public class UnrankedLobbiesView : MonoBehaviour
         // Set opponent to lobby owner (host) so OnLobbyEntered/flow can proceed
         SteamManager.Instance.currentLobby = lobby;
         SteamManager.Instance.LobbyPartner = lobby.Owner;
-        SteamManager.Instance.OpponentSteamId = lobby.Owner.Id;
-        SteamManager.Instance.LobbyPartnerDisconnected = false;
 
         // Proactively accept P2P in case callback order differs
         try { SteamNetworking.AcceptP2PSessionWithUser(lobby.Owner.Id); } catch { }

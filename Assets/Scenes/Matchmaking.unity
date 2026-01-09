@@ -390,7 +390,6 @@ GameObject:
   - component: {fileID: 195469481}
   - component: {fileID: 195469480}
   - component: {fileID: 195469483}
-  - component: {fileID: 195469484}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -516,21 +515,6 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!114 &195469484
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 195469479}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1d3befe8d2604418caa9c3a44b7aba6d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::VoiceChatP2P
-  pushToTalkKey: 118
-  alwaysRecord: 0
-  voiceChannel: 2
 --- !u!1 &340604775
 GameObject:
   m_ObjectHideFlags: 0
@@ -2162,6 +2146,43 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1484407392}
   m_CullTransparentMesh: 1
+--- !u!1 &1601695987 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2231938572761584968, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+  m_PrefabInstance: {fileID: 1188896197944727657}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1601695991
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1601695987}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d3befe8d2604418caa9c3a44b7aba6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VoiceChatP2P
+  pushToTalkAction:
+    m_Name: Push To Talk
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 8a32b26d-7d1c-492a-a226-553c1ee2110f
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 
+      m_Id: 207da7a4-6daa-4c03-90de-44d44ec1f4bf
+      m_Path: <Keyboard>/v
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: Push To Talk
+      m_Flags: 0
+    m_Flags: 0
+  alwaysRecord: 0
+  voiceChannel: 2
+  isSending: 0
 --- !u!1001 &1796643905
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2827,7 +2848,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2231938572761584968, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1601695991}
   m_SourcePrefab: {fileID: 100100000, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

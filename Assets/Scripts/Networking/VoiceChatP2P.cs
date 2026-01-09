@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Steamworks;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Voice chat over Steam P2P using Facepunch Steamworks.
@@ -13,14 +14,19 @@ using UnityEngine;
 public class VoiceChatP2P : MonoBehaviour
 {
     [Header("Voice Settings")]
-    [SerializeField] private KeyCode pushToTalkKey = KeyCode.V;
+    // [SerializeField] private KeyCode pushToTalkKey = KeyCode.V;
+    [SerializeField] private InputAction pushToTalkAction;
     [SerializeField] private bool alwaysRecord = false; // For testing; use push-to-talk in production
     [SerializeField] private int voiceChannel = 2; // Separate P2P channel for voice data
 
     private MemoryStream voiceStream;
     private Dictionary<SteamId, VoiceRemotePlayer> remoteVoicePlayers = new();
+
+    public bool isTalking => SteamUser.HasVoiceData;
+    public bool isRecording => SteamUser.VoiceRecord;
+    public bool isSending = false;
     
-    private bool isLocalPlayerActive => SteamManager.Instance != null && !SteamManager.Instance.LobbyPartnerDisconnected;
+    private bool isLocalPlayerActive => SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount <= 1;
 
     private void Awake()
     {
@@ -32,7 +38,8 @@ public class VoiceChatP2P : MonoBehaviour
         // Recording: capture voice and send via P2P
         if (isLocalPlayerActive)
         {
-            bool shouldRecord = alwaysRecord || Input.GetKey(pushToTalkKey);
+            // remove legacy getKey
+            bool shouldRecord = alwaysRecord || pushToTalkAction.ReadValue<float>() > 0;
             SteamUser.VoiceRecord = shouldRecord;
 
             if (SteamUser.HasVoiceData)
@@ -47,7 +54,11 @@ public class VoiceChatP2P : MonoBehaviour
 
                     // Send compressed voice via P2P on dedicated voice channel
                     SendVoicePacket(compressedData, compressedRead);
+                    isSending = true;
                 }
+            } else
+            {
+                isSending = false;
             }
         }
 
@@ -151,6 +162,7 @@ public class VoiceChatP2P : MonoBehaviour
 
     public void RemoveRemotePlayer(SteamId steamId)
     {
+        Debug.Log($"Removing remote voice player for {steamId}");
         if (remoteVoicePlayers.TryGetValue(steamId, out var remotePlayer))
         {
             if (remotePlayer != null)

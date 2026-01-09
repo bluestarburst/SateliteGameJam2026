@@ -205,6 +205,7 @@ public class NetworkConnectionManager : MonoBehaviour
     {
         if (spawnedRemotePlayers.TryGetValue(steamId, out var instance))
         {
+            Debug.Log($"Despawning remote player for {steamId}");
             if (instance != null)
             {
                 Destroy(instance);

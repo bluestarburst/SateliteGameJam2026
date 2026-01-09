@@ -38,9 +38,6 @@ public class SteamManager : MonoBehaviour
         set => lobbyPartner = value;
     }
 
-    public SteamId OpponentSteamId { get; set; }
-    public bool LobbyPartnerDisconnected { get; set; }
-
     // Multi-peer tracking
     public event Action<SteamId, string> RemotePlayerJoined;
     public event Action<SteamId> RemotePlayerLeft;
@@ -251,7 +248,6 @@ public class SteamManager : MonoBehaviour
         }
 
         Debug.Log("Opponent has left the lobby");
-        LobbyPartnerDisconnected = true;
         RemoveRemoteMember(friend.Id);
     }
 
@@ -322,10 +318,8 @@ public class SteamManager : MonoBehaviour
             RemoveRemoteMember(remote);
         }
         remoteMembers.Clear();
-        OpponentSteamId = default;
 
         currentLobby = joinedLobby;
-        LobbyPartnerDisconnected = false;
         SyncRemoteMembersWithLobby(joinedLobby);
         if (!string.IsNullOrEmpty(gameSceneName))
         {
@@ -335,7 +329,6 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyCreatedCallback(Result result, Lobby lobby)
     {
-        LobbyPartnerDisconnected = false;
         if (result != Result.OK)
         {
             Debug.Log("lobby creation result not ok");
@@ -352,8 +345,6 @@ public class SteamManager : MonoBehaviour
             return;
         }
 
-        LobbyPartner = friend;
-        LobbyPartnerDisconnected = false;
         AddRemoteMember(friend);
     }
 
@@ -431,7 +422,6 @@ public class SteamManager : MonoBehaviour
                 throw new Exception();
             }
 
-            LobbyPartnerDisconnected = false;
             hostedMultiplayerLobby = createLobbyOutput.Value;
             hostedMultiplayerLobby.SetData(isFriendLobby, TRUE);
             hostedMultiplayerLobby.SetData(ownerNameDataString, PlayerName);
@@ -460,7 +450,6 @@ public class SteamManager : MonoBehaviour
                 throw new Exception();
             }
 
-            LobbyPartnerDisconnected = false;
             hostedMultiplayerLobby = createLobbyOutput.Value;
             hostedMultiplayerLobby.SetPublic();
             hostedMultiplayerLobby.SetJoinable(true);
@@ -532,13 +521,6 @@ public class SteamManager : MonoBehaviour
 
         remoteMembers[friend.Id] = friend;
 
-        // Maintain legacy single-opponent field for older code paths
-        if (OpponentSteamId.Value == 0)
-        {
-            OpponentSteamId = friend.Id;
-        }
-
-        LobbyPartnerDisconnected = false;
         AcceptP2P(friend.Id);
 
         RemotePlayerJoined?.Invoke(friend.Id, friend.Name);
@@ -563,16 +545,6 @@ public class SteamManager : MonoBehaviour
 
             RemotePlayerLeft?.Invoke(steamId);
             TryDespawnRemotePlayer(steamId);
-        }
-
-        if (remoteMembers.Count == 0)
-        {
-            LobbyPartnerDisconnected = true;
-            OpponentSteamId = default;
-        }
-        else if (OpponentSteamId == steamId)
-        {
-            OpponentSteamId = remoteMembers.Keys.First();
         }
     }
 
@@ -606,7 +578,6 @@ public class SteamManager : MonoBehaviour
         }
 
         Debug.Log("joining socket server");
-        steamConnectionManager = SteamNetworkingSockets.ConnectRelay<SteamConnectionManager>(OpponentSteamId, 0);
         activeSteamSocketServer = false;
         activeSteamSocketConnection = true;
     }
