@@ -4,14 +4,17 @@ using System.IO;
 using Steamworks;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using SatelliteGameJam.Networking.Identity;
 
-/// <summary>
-/// Voice chat over Steam P2P using Facepunch Steamworks.
-/// Records voice once, compresses it, and sends to all connected peers.
-/// Routes incoming voice to per-sender VoiceRemotePlayer components for playback.
-/// Attach to a GameObject in your gameplay scene.
-/// </summary>
-public class VoiceChatP2P : MonoBehaviour
+namespace SatelliteGameJam.Networking.Voice
+{
+    /// <summary>
+    /// Voice chat over Steam P2P using Facepunch Steamworks.
+    /// Records voice once, compresses it, and sends to all connected peers.
+    /// Routes incoming voice to per-sender VoiceRemotePlayer components for playback.
+    /// Attach to a GameObject in your gameplay scene.
+    /// </summary>
+    public class VoiceChatP2P : MonoBehaviour
 {
     [Header("Voice Settings")]
     // [SerializeField] private KeyCode pushToTalkKey = KeyCode.V;
@@ -182,4 +185,5 @@ public class VoiceChatP2P : MonoBehaviour
         SteamUser.VoiceRecord = false;
         voiceStream?.Dispose();
     }
+}
 }

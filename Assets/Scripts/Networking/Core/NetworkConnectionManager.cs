@@ -4,13 +4,17 @@ using System.Linq;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
+using SatelliteGameJam.Networking.Messages;
+using SatelliteGameJam.Networking.Identity;
 
-/// <summary>
-/// Central packet router for all network messages.
-/// Routes packets by channel and message type to registered handlers.
-/// Does NOT track peers - queries SteamManager.Instance.currentLobby.Members for peer list.
-/// </summary>
-public class NetworkConnectionManager : MonoBehaviour
+namespace SatelliteGameJam.Networking.Core
+{
+    /// <summary>
+    /// Central packet router for all network messages.
+    /// Routes packets by channel and message type to registered handlers.
+    /// Does NOT track peers - queries SteamManager.Instance.currentLobby.Members for peer list.
+    /// </summary>
+    public class NetworkConnectionManager : MonoBehaviour
 {
     public static NetworkConnectionManager Instance { get; private set; }
 
@@ -19,7 +23,7 @@ public class NetworkConnectionManager : MonoBehaviour
 
     // include info about channels to poll for incoming packets
     [Header("Channels to Poll")]
-    [SerializeField] private int[] channelsToPoll = new[] { 0, 1, 3 }; // Exclude voice channel 2
+    [SerializeField] private int[] channelsToPoll = new[] { 0, 1, 3, 4 }; // Exclude voice channel 2
 
     // Player asset to create for new connections (optional)
     [Header("Player Prefab")]
@@ -217,4 +221,5 @@ public class NetworkConnectionManager : MonoBehaviour
             spawnedRemotePlayers.Remove(steamId);
         }
     }
+}
 }

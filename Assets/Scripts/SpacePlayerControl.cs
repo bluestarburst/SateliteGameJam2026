@@ -17,6 +17,7 @@ public class SpacePlayerControl : MonoBehaviour
     public CharacterController controller;
     public Vector3 groundAvgNormal = Vector3.up;
     public bool isGrounded;
+    public float nextGroundCheckTime;
 
 
     [Header("Input Actions")]
@@ -35,11 +36,24 @@ public class SpacePlayerControl : MonoBehaviour
         jumpAction.action.Disable();
     }
 
+    private bool canMove = false;
+    // don't enable rotation/movement until 1s after start
+    private void Start()
+    {
+        Invoke("EnableMovement", 1f);
+    }
+
+    private void EnableMovement()
+    {
+        canMove = true;
+    }
+
 
     void Update()
     {
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
+        if (!canMove) return;
         Rotation();
         if (isGrounded)
         {
@@ -168,6 +182,8 @@ public class SpacePlayerControl : MonoBehaviour
 
     private Vector3 jumpXZDirection = Vector3.zero;
 
+    public int groundCount = 1;
+
     public void InteriorMovement()
     {
 
@@ -179,7 +195,15 @@ public class SpacePlayerControl : MonoBehaviour
             move = new Vector3(input.x, 0, input.y);
             move = Vector3.ClampMagnitude(move, 1f);
             move = move * playerSpeed;
-            playerVelocity.y = -0.1f;
+            if (groundCount == 0)
+            {
+                playerVelocity.y = -9.81f;
+            }
+            else
+            {
+                playerVelocity.y = -0.2f;
+            }
+
             playerVelocity.x = move.x;
             playerVelocity.z = move.z;
 
@@ -208,6 +232,7 @@ public class SpacePlayerControl : MonoBehaviour
         {
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * -9.81f);
             isGrounded = false;
+            nextGroundCheckTime = Time.time + 0.5f; // prevent immediate ground re-detection
 
             jumpXZDirection = move * 1.5f;
         }
