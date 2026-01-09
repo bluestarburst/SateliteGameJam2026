@@ -1,5 +1,7 @@
 using UnityEngine;
 
+using SatelliteGameJam.Networking.Voice;
+
 public class TransmissionInteract : MonoBehaviour, IInteractable
 {
     public bool answeringTransmission = false;
