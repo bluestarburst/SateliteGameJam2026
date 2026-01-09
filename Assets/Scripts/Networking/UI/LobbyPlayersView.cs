@@ -2,6 +2,9 @@ using Steamworks.Data;
 using Steamworks;
 using UnityEngine;
 using TMPro;
+using SatelliteGameJam.Networking.State;
+using SatelliteGameJam.Networking.Messages;
+using System.Collections.Generic;
 
 // Displays members of the current lobby in a ScrollView
 public class LobbyPlayersView : MonoBehaviour
@@ -14,13 +17,35 @@ public class LobbyPlayersView : MonoBehaviour
     [Header("Optional")]
     [SerializeField] private string emptyStateMessage = "Waiting for players…";
 
+    private Dictionary<SteamId, GameObject> playerItems = new Dictionary<SteamId, GameObject>();
+
+    private void Start()
+    {
+        if (SteamManager.Instance == null || !SteamManager.Instance.ConnectedToSteam())
+        {
+            Debug.Log("Steam not initialized; cannot display lobby players.");
+            return;
+        }
+
+        if (autoRefreshOnEnable) RefreshList();
+
+        // Listen to player state changes to update the list when players change scenes or roles
+        PlayerStateManager.Instance.OnRoleChanged += OnPlayerRoleChanged;
+    }
+
+    private void OnPlayerRoleChanged(SteamId steamId, PlayerRole newRole)
+    {
+        // Update the player's item color based on their new role
+        SetPlayerItemColor(steamId, newRole == PlayerRole.SpaceStation ? new UnityEngine.Color(0.5f, 0.8f, 1f) : new UnityEngine.Color(0.8f, 0.5f, 0.5f));
+    }
+
     private void OnEnable()
     {
         SteamMatchmaking.OnLobbyMemberJoined += OnLobbyMemberChanged;
         SteamMatchmaking.OnLobbyMemberLeave += OnLobbyMemberChanged;
         SteamMatchmaking.OnLobbyMemberDisconnected += OnLobbyMemberChanged;
 
-        if (autoRefreshOnEnable) RefreshList();
+        if (autoRefreshOnEnable) RefreshList();        
     }
 
     private void OnDisable()
@@ -37,6 +62,10 @@ public class LobbyPlayersView : MonoBehaviour
             Debug.Log("No active lobby to display");
             ClearContent();
             AddPlaceholder(emptyStateMessage);
+
+            // call again in 5 seconds to check for lobby creation
+            Invoke(nameof(RefreshList), 2f);
+
             return;
         }
 
@@ -48,7 +77,7 @@ public class LobbyPlayersView : MonoBehaviour
         foreach (var member in lobby.Members)
         {
             any = true;
-            AddPlayerItem(member.Name);
+            AddPlayerItem(member.Id, member.Name);
         }
 
         if (!any)
@@ -66,7 +95,9 @@ public class LobbyPlayersView : MonoBehaviour
         }
     }
 
-    private void AddPlayerItem(string name)
+    // listen to connection manager for 
+
+    private void AddPlayerItem(SteamId steamId, string name)
     {
         if (playerItemTextPrefab == null || contentRoot == null)
         {
@@ -76,6 +107,16 @@ public class LobbyPlayersView : MonoBehaviour
 
         var text = Instantiate(playerItemTextPrefab, contentRoot);
         text.text = name;
+
+        // Set initial color based on role
+        var playerState = PlayerStateManager.Instance.GetPlayerState(steamId);
+        if (playerState != null)
+        {
+            SetPlayerItemColor(steamId, playerState.Role == PlayerRole.SpaceStation ? new UnityEngine.Color(0.5f, 0.8f, 1f) : new UnityEngine.Color(0.8f, 0.5f, 0.5f));
+        }
+
+        // Store reference for future updates (e.g. role changes)
+        playerItems[steamId] = text.gameObject;
     }
 
     private void AddPlaceholder(string message)
@@ -93,5 +134,47 @@ public class LobbyPlayersView : MonoBehaviour
         {
             Destroy(contentRoot.GetChild(i).gameObject);
         }
+    }
+
+    private void SetPlayerItemColor(SteamId steamId, UnityEngine.Color color)
+    {
+        if (playerItems.TryGetValue(steamId, out var item))
+        {
+            var text = item.GetComponent<TMP_Text>();
+            if (text != null)
+            {
+                text.color = color;
+            }
+        }
+    }
+
+    public void JoinSpaceTeam()
+    {
+        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.Id.Value == 0)
+        {
+            Debug.LogWarning("Cannot join space team - not in a lobby.");
+            return;
+        }
+
+        Debug.Log("Joining space team");
+
+        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.SpaceStation);
+
+        SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.5f, 0.8f, 1f)); // Light blue for space team
+    }
+
+    public void JoinGroundTeam()
+    {
+        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.Id.Value == 0)
+        {
+            Debug.LogWarning("Cannot join ground team - not in a lobby.");
+            return;
+        }
+
+        Debug.Log("Joining ground team");
+
+        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
+
+        SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.8f, 0.5f, 0.5f)); // Light red for ground team  
     }
 }

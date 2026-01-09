@@ -12,7 +12,11 @@ GameObject:
   - component: {fileID: 3549309175554565782}
   - component: {fileID: 7202338266808824058}
   - component: {fileID: 2977847412604982697}
+  - component: {fileID: -354346587164634655}
+  - component: {fileID: -470972542733557889}
   - component: {fileID: 7960403751224345507}
+  - component: {fileID: 188199318739152681}
+  - component: {fileID: 1268712716605031959}
   m_Layer: 0
   m_Name: SteamPack
   m_TagString: Untagged
@@ -63,7 +67,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkConnectionManager
   channelsToPoll: 00000000010000000300000004000000
-  autoSpawnPlayer: 1
+  autoSpawnPlayer: 0
   playerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
 --- !u!114 &2977847412604982697
 MonoBehaviour:
@@ -77,6 +81,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e78186ebe5d682249b1ac03f2132a34b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.PlayerStateManager
+--- !u!114 &-354346587164634655
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9238838b39ce4f428621adad4349d5f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.SceneSyncManager
+  sceneChangeTimeout: 10
+--- !u!114 &-470972542733557889
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5ba6ed52165e2b46bea1b19ef97c843, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.SatelliteStateManager
+  health: 100
+  sendRate: 1
 --- !u!114 &7960403751224345507
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -89,24 +120,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1d3befe8d2604418caa9c3a44b7aba6d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VoiceChatP2P
-  pushToTalkAction:
-    m_Name: Push To Talk
-    m_Type: 1
-    m_ExpectedControlType: Button
-    m_Id: 8a32b26d-7d1c-492a-a226-553c1ee2110f
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 
-      m_Id: 207da7a4-6daa-4c03-90de-44d44ec1f4bf
-      m_Path: <Keyboard>/v
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Push To Talk
-      m_Flags: 0
-    m_Flags: 0
+  pushToTalkAction: 36
   alwaysRecord: 0
   voiceChannel: 2
   isSending: 0
-  pressingButton: 0
+--- !u!114 &188199318739152681
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04ca81f132f751349877925a11995836, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.VoiceSessionManager
+  spaceProximityRadius: 20
+  enableDebugLogs: 0
+--- !u!114 &1268712716605031959
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5be8401e71c1b6045b5e0850cceefb3e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.ObjectRegistryBridge

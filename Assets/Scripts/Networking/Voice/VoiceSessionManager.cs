@@ -21,6 +21,7 @@ namespace SatelliteGameJam.Networking.Voice
     [Header("Voice Rules")]
     [SerializeField] private float spaceProximityRadius = 20f; // Distance for space-to-space voice
     [SerializeField] private bool enableDebugLogs = false;
+    [SerializeField] private string LobbyScene = "Lobby"; // Toggle for testing
 
     // Console interaction tracking
     private readonly HashSet<SteamId> playersAtConsole = new();
@@ -174,7 +175,7 @@ namespace SatelliteGameJam.Networking.Voice
 
             PlayerState remoteState = PlayerStateManager.Instance.GetPlayerState(remoteSteamId);
 
-            bool shouldHear = ShouldHearPlayer(localState, remoteState, remoteSteamId);
+            bool shouldHear = localState.Scene == NetworkSceneId.Lobby || ShouldHearPlayer(localState, remoteState, remoteSteamId);
             
             // Control AudioSource enabled state
             AudioSource audioSource = voicePlayer.GetComponent<AudioSource>();
