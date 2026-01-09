@@ -25,9 +25,9 @@ public class VoiceChatP2P : MonoBehaviour
     public bool isTalking => SteamUser.HasVoiceData;
     public bool isRecording => SteamUser.VoiceRecord;
     public bool isSending = false;
-    public bool pressingButton => pushToTalkAction.IsPressed();
-    
-    private bool isLocalPlayerActive => SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount <= 1;
+    public bool pressingButton = false;
+
+    private bool isLocalPlayerActive => SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount > 1;
 
     private void Awake()
     {
@@ -42,8 +42,7 @@ public class VoiceChatP2P : MonoBehaviour
             // remove legacy getKey
             bool shouldRecord = alwaysRecord || pushToTalkAction.IsPressed();
             SteamUser.VoiceRecord = shouldRecord;
-
-
+            pressingButton = pushToTalkAction.IsPressed();
 
             if (SteamUser.HasVoiceData)
             {
@@ -59,7 +58,8 @@ public class VoiceChatP2P : MonoBehaviour
                     SendVoicePacket(compressedData, compressedRead);
                     isSending = true;
                 }
-            } else
+            }
+            else
             {
                 isSending = false;
             }
@@ -79,12 +79,12 @@ public class VoiceChatP2P : MonoBehaviour
     private void SendVoicePacket(byte[] compressed, int length)
     {
         if (SteamManager.Instance?.currentLobby == null) return;
-        
+
         // Prepend local player SteamId to packet
         byte[] packet = new byte[8 + length];
         System.Buffer.BlockCopy(BitConverter.GetBytes(SteamManager.Instance.PlayerSteamId.Value), 0, packet, 0, 8);
         System.Buffer.BlockCopy(compressed, 0, packet, 8, length);
-        
+
         // Fan out to all peers
         foreach (var member in SteamManager.Instance.currentLobby.Members)
         {
@@ -102,11 +102,11 @@ public class VoiceChatP2P : MonoBehaviour
     private void HandleIncomingVoicePacket(byte[] data, int length)
     {
         if (length < 8) return; // Need at least SteamId
-        
+
         // Extract sender SteamId
         ulong senderValue = BitConverter.ToUInt64(data, 0);
         SteamId senderId = new SteamId { Value = senderValue };
-        
+
         // Get or create VoiceRemotePlayer for this sender
         if (!remoteVoicePlayers.TryGetValue(senderId, out var remotePlayer))
         {
@@ -120,7 +120,7 @@ public class VoiceChatP2P : MonoBehaviour
                 return; // Could not create player
             }
         }
-        
+
         // Forward compressed data (skip SteamId header)
         byte[] compressedData = new byte[length - 8];
         System.Buffer.BlockCopy(data, 8, compressedData, 0, length - 8);
@@ -137,13 +137,13 @@ public class VoiceChatP2P : MonoBehaviour
             remoteAvatar = new GameObject($"RemoteVoice_{senderId}");
             remoteAvatar.AddComponent<AudioSource>();
         }
-        
+
         var remotePlayer = remoteAvatar.GetComponent<VoiceRemotePlayer>();
         if (remotePlayer == null)
         {
             remotePlayer = remoteAvatar.AddComponent<VoiceRemotePlayer>();
         }
-        
+
         remotePlayer.Initialize(senderId);
         return remotePlayer;
     }
