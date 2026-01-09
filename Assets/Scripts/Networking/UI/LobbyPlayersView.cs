@@ -5,6 +5,7 @@ using TMPro;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
 using System.Collections.Generic;
+using System.Linq;
 
 // Displays members of the current lobby in a ScrollView
 public class LobbyPlayersView : MonoBehaviour
@@ -18,6 +19,8 @@ public class LobbyPlayersView : MonoBehaviour
     [SerializeField] private string emptyStateMessage = "Waiting for players…";
 
     private Dictionary<SteamId, GameObject> playerItems = new Dictionary<SteamId, GameObject>();
+
+    public GameObject startButton;
 
     private void Start()
     {
@@ -37,6 +40,8 @@ public class LobbyPlayersView : MonoBehaviour
     {
         // Update the player's item color based on their new role
         SetPlayerItemColor(steamId, newRole == PlayerRole.SpaceStation ? new UnityEngine.Color(0.5f, 0.8f, 1f) : new UnityEngine.Color(0.8f, 0.5f, 0.5f));
+
+        CanStartGame();
     }
 
     private void OnEnable()
@@ -55,15 +60,43 @@ public class LobbyPlayersView : MonoBehaviour
         SteamMatchmaking.OnLobbyMemberDisconnected -= OnLobbyMemberChanged;
     }
 
+    private void CanStartGame()
+    {
+        if (SteamManager.Instance == null || !SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
+        {
+            Debug.Log("Cannot start game - not enough players.");
+            startButton.SetActive(false);
+            return;
+        }
+
+        // need at least 2 players on different teams to start
+        var members = SteamManager.Instance.currentLobby.Members;
+        if (members.Any(m => PlayerStateManager.Instance.GetPlayerState(m.Id)?.Role == PlayerRole.SpaceStation) &&
+            members.Any(m => PlayerStateManager.Instance.GetPlayerState(m.Id)?.Role == PlayerRole.GroundControl))
+        {
+            startButton.SetActive(true);
+        }
+        else
+        {
+            Debug.Log("Cannot start game - all players must be on different teams.");
+            startButton.SetActive(false);
+            return;
+        }
+
+        var lobby = SteamManager.Instance.currentLobby;
+        startButton.SetActive(lobby.MemberCount > 1);
+    }
+
     public void RefreshList()
     {
         if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.Id.Value == 0)
         {
             Debug.Log("No active lobby to display");
+            startButton.SetActive(false);
             ClearContent();
             AddPlaceholder(emptyStateMessage);
 
-            // call again in 5 seconds to check for lobby creation
+            // call again in 2 seconds to check for lobby creation
             Invoke(nameof(RefreshList), 2f);
 
             return;
@@ -92,6 +125,7 @@ public class LobbyPlayersView : MonoBehaviour
         if (SteamManager.Instance != null && lobby.Id == SteamManager.Instance.currentLobby.Id)
         {
             RefreshList();
+            CanStartGame();
         }
     }
 
@@ -161,6 +195,8 @@ public class LobbyPlayersView : MonoBehaviour
         PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.SpaceStation);
 
         SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.5f, 0.8f, 1f)); // Light blue for space team
+
+        CanStartGame();
     }
 
     public void JoinGroundTeam()
@@ -176,5 +212,7 @@ public class LobbyPlayersView : MonoBehaviour
         PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
 
         SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.8f, 0.5f, 0.5f)); // Light red for ground team  
+
+        CanStartGame();
     }
 }

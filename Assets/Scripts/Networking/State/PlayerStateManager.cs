@@ -38,12 +38,21 @@ namespace SatelliteGameJam.Networking.State
         DontDestroyOnLoad(gameObject);
 
         // Register message handlers
-        if (NetworkConnectionManager.Instance != null)
+        RepeatUntilRegistered();
+    }
+
+    private void RepeatUntilRegistered()
+    {
+        if (NetworkConnectionManager.Instance == null)
         {
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerReady, OnReceivePlayerReady);
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.RoleAssign, OnReceiveRoleAssign);
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerSceneState, OnReceivePlayerSceneState);
+            Debug.LogWarning("PlayerStateManager: NetworkConnectionManager not found. Retrying...");
+            Invoke(nameof(RepeatUntilRegistered), 0.5f);
+            return;
         }
+
+        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerReady, OnReceivePlayerReady);
+        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.RoleAssign, OnReceiveRoleAssign);
+        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerSceneState, OnReceivePlayerSceneState);
     }
 
     /// <summary>
