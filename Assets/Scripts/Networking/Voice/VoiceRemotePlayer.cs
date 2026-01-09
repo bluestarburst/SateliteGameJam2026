@@ -4,13 +4,15 @@ using System.IO;
 using Steamworks;
 using UnityEngine;
 
-/// <summary>
-/// Manages voice playback for a specific remote player.
-/// Each remote speaker gets their own VoiceRemotePlayer with isolated audio buffer.
-/// Supports positional 3D audio when attached to player avatar.
-/// </summary>
-[RequireComponent(typeof(AudioSource))]
-public class VoiceRemotePlayer : MonoBehaviour
+namespace SatelliteGameJam.Networking.Voice
+{
+    /// <summary>
+    /// Manages voice playback for a specific remote player.
+    /// Each remote speaker gets their own VoiceRemotePlayer with isolated audio buffer.
+    /// Supports positional 3D audio when attached to player avatar.
+    /// </summary>
+    [RequireComponent(typeof(AudioSource))]
+    public class VoiceRemotePlayer : MonoBehaviour
 {
     [SerializeField] private float playbackLatencySeconds = 0.1f;
     
@@ -124,6 +126,7 @@ public class VoiceRemotePlayer : MonoBehaviour
     
     private void OnDestroy()
     {
+        Debug.Log($"Cleaning up VoiceRemotePlayer for {senderSteamId}");
         uncompressedStream?.Dispose();
     }
     
@@ -133,4 +136,5 @@ public class VoiceRemotePlayer : MonoBehaviour
         public byte[] Buffer { get; set; }
         public int Size { get; set; }
     }
+}
 }

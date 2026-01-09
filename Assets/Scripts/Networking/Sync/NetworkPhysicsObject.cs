@@ -1,13 +1,18 @@
 using Steamworks;
 using UnityEngine;
+using SatelliteGameJam.Networking.Identity;
+using SatelliteGameJam.Networking.Messages;
+using SatelliteGameJam.Networking.Core;
 
-/// <summary>
-/// Synchronizes physics state for free-standing objects (soccer ball, etc.).
-/// Uses last-touch authority model - whoever last collided with the object becomes authoritative.
-/// Authority player simulates physics and broadcasts state; others interpolate/extrapolate.
-/// </summary>
-[RequireComponent(typeof(NetworkIdentity), typeof(Rigidbody))]
-public class NetworkPhysicsObject : MonoBehaviour
+namespace SatelliteGameJam.Networking.Sync
+{
+    /// <summary>
+    /// Synchronizes physics state for free-standing objects (soccer ball, etc.).
+    /// Uses last-touch authority model - whoever last collided with the object becomes authoritative.
+    /// Authority player simulates physics and broadcasts state; others interpolate/extrapolate.
+    /// </summary>
+    [RequireComponent(typeof(NetworkIdentity), typeof(Rigidbody))]
+    public class NetworkPhysicsObject : MonoBehaviour
 {
     [SerializeField] private float sendRate = 10f; // Hz
     [SerializeField] private float authorityHandoffCooldown = 0.2f;
@@ -192,4 +197,5 @@ public class NetworkPhysicsObject : MonoBehaviour
         // Fallback: return local player if it's the local player's object
         return SteamManager.Instance?.PlayerSteamId ?? default;
     }
+}
 }
