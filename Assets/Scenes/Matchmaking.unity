@@ -2804,6 +2804,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: SteamPack
       objectReference: {fileID: 0}
+    - target: {fileID: 3549309175554565782, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: autoCreateLobbyForTesting
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

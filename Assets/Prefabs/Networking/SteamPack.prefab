@@ -62,4 +62,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkConnectionManager
   channelsToPoll: 000000000100000003000000
   autoSpawnPlayer: 1
-  playerPrefab: {fileID: 0}
+  playerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
