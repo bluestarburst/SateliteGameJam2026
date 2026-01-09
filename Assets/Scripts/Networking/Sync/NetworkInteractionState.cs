@@ -1,14 +1,19 @@
 using System;
 using Steamworks;
 using UnityEngine;
+using SatelliteGameJam.Networking.Identity;
+using SatelliteGameJam.Networking.Messages;
+using SatelliteGameJam.Networking.Core;
 
-/// <summary>
-/// Manages networked interactions for objects (pickup, drop, use).
-/// Tracks ownership and sends discrete events rather than continuous state.
-/// Uses reliable messaging on channel 3 for critical events.
-/// </summary>
-[RequireComponent(typeof(NetworkIdentity))]
-public class NetworkInteractionState : MonoBehaviour
+namespace SatelliteGameJam.Networking.Sync
+{
+    /// <summary>
+    /// Manages networked interactions for objects (pickup, drop, use).
+    /// Tracks ownership and sends discrete events rather than continuous state.
+    /// Uses reliable messaging on channel 3 for critical events.
+    /// </summary>
+    [RequireComponent(typeof(NetworkIdentity))]
+    public class NetworkInteractionState : MonoBehaviour
 {
     private NetworkIdentity netIdentity;
     private SteamId currentOwner;
@@ -174,4 +179,5 @@ public class NetworkInteractionState : MonoBehaviour
         SteamId userId = NetworkSerialization.ReadULong(data, ref offset);
         OnUsed?.Invoke(userId);
     }
+}
 }

@@ -11,6 +11,8 @@ GameObject:
   - component: {fileID: 1411251398165649952}
   - component: {fileID: 3549309175554565782}
   - component: {fileID: 7202338266808824058}
+  - component: {fileID: 2977847412604982697}
+  - component: {fileID: 7960403751224345507}
   m_Layer: 0
   m_Name: SteamPack
   m_TagString: Untagged
@@ -47,7 +49,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SteamManager
   gameAppId: 480
   gameSceneName: Lobby
-  autoCreateLobbyForTesting: 1
+  autoCreateLobbyForTesting: 0
 --- !u!114 &7202338266808824058
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -60,6 +62,51 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a634b192b792043b786e244380eceb8a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkConnectionManager
-  channelsToPoll: 000000000100000003000000
+  channelsToPoll: 00000000010000000300000004000000
   autoSpawnPlayer: 1
   playerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
+--- !u!114 &2977847412604982697
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e78186ebe5d682249b1ac03f2132a34b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.PlayerStateManager
+--- !u!114 &7960403751224345507
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d3befe8d2604418caa9c3a44b7aba6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VoiceChatP2P
+  pushToTalkAction:
+    m_Name: Push To Talk
+    m_Type: 1
+    m_ExpectedControlType: Button
+    m_Id: 8a32b26d-7d1c-492a-a226-553c1ee2110f
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 
+      m_Id: 207da7a4-6daa-4c03-90de-44d44ec1f4bf
+      m_Path: <Keyboard>/v
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: Push To Talk
+      m_Flags: 0
+    m_Flags: 0
+  alwaysRecord: 0
+  voiceChannel: 2
+  isSending: 0
+  pressingButton: 0

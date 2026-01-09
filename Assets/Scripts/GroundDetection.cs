@@ -1,5 +1,6 @@
 
 
+
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -32,7 +33,7 @@ public class GroundDetection : MonoBehaviour
             return;
         }
 
-        Debug.Log($"Collided with: {collision.gameObject.name}");
+        // Debug.Log($"Collided with: {collision.gameObject.name}");
         // Access contact points: Collision.GetContact(0).point
 
         // remove the contact normal for this collision if it already exists
@@ -57,8 +58,6 @@ public class GroundDetection : MonoBehaviour
         playerControl.isGrounded = true;
     }
 
-    private float lastGroundCheckTime = 0.0f;
-
     void OnCollisionStay(Collision collision)
     {
         // watch for new contact points and update the normal if they change
@@ -67,8 +66,7 @@ public class GroundDetection : MonoBehaviour
             return;
         }
 
-        // only trigger every 0.1 seconds to avoid spamming the console
-        if (Time.time - lastGroundCheckTime < 0.1f)
+        if (Time.time < playerControl.nextGroundCheckTime)
         {
             return;
         }
@@ -90,7 +88,7 @@ public class GroundDetection : MonoBehaviour
         }
         playerControl.groundAvgNormal = CalculateGroundAvgNormal();
         playerControl.isGrounded = true;
-        lastGroundCheckTime = Time.time;
+        playerControl.nextGroundCheckTime = Time.time + 0.1f; // check every 0.1 seconds
     }
 
     void OnCollisionExit(Collision collision)
@@ -99,16 +97,13 @@ public class GroundDetection : MonoBehaviour
         {
             return;
         }
-        Debug.Log($"Stopped colliding with: {collision.gameObject.name}");
+        // Debug.Log($"Stopped colliding with: {collision.gameObject.name}");
         // Do something when the collision ends
         contactNormals.Remove(collision.gameObject);
 
         if (contactNormals.Count > 0)
         {
             playerControl.groundAvgNormal = CalculateGroundAvgNormal();
-        } else
-        {
-            playerControl.isGrounded = false;
-        }    
+        }
     }
 }

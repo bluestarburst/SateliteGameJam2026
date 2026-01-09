@@ -7,6 +7,7 @@ using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using SatelliteGameJam.Networking.Core;
 
 /// <summary>
 /// Steamworks entry point that mirrors the Facepunch Steamworks tutorial core loop.

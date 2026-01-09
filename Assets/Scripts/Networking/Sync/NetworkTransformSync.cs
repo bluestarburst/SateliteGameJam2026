@@ -1,13 +1,18 @@
 using Steamworks;
 using UnityEngine;
+using SatelliteGameJam.Networking.Identity;
+using SatelliteGameJam.Networking.Messages;
+using SatelliteGameJam.Networking.Core;
 
-/// <summary>
-/// Synchronizes transform (position, rotation, velocity) for owner-driven objects.
-/// Owner sends state at fixed rate, non-owners interpolate/extrapolate to received state.
-/// Suitable for player-held objects or owned game entities.
-/// </summary>
-[RequireComponent(typeof(NetworkIdentity))]
-public class NetworkTransformSync : MonoBehaviour
+namespace SatelliteGameJam.Networking.Sync
+{
+    /// <summary>
+    /// Synchronizes transform (position, rotation, velocity) for owner-driven objects.
+    /// Owner sends state at fixed rate, non-owners interpolate/extrapolate to received state.
+    /// Suitable for player-held objects or owned game entities.
+    /// </summary>
+    [RequireComponent(typeof(NetworkIdentity))]
+    public class NetworkTransformSync : MonoBehaviour
 {
     [SerializeField] private float sendRate = 10f;
     [SerializeField] private bool syncPosition = true;
@@ -130,4 +135,5 @@ public class NetworkTransformSync : MonoBehaviour
         if (syncRotation)
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
     }
+}
 }

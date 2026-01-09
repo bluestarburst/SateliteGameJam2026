@@ -2,11 +2,13 @@ using System.Collections.Generic;
 using Steamworks;
 using UnityEngine;
 
-/// <summary>
-/// Identifies a networked object with a unique ID and tracks its owner.
-/// Maintains a static registry for quick lookups by network ID.
-/// </summary>
-public class NetworkIdentity : MonoBehaviour
+namespace SatelliteGameJam.Networking.Identity
+{
+    /// <summary>
+    /// Identifies a networked object with a unique ID and tracks its owner.
+    /// Maintains a static registry for quick lookups by network ID.
+    /// </summary>
+    public class NetworkIdentity : MonoBehaviour
 {
     [SerializeField] private uint networkId;
     
@@ -104,4 +106,5 @@ public class NetworkIdentity : MonoBehaviour
         // Hash of the object's name and position.
         return (uint)(name.GetHashCode() ^ transform.position.GetHashCode());
     }
+}
 }
