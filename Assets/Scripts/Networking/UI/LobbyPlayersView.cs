@@ -22,6 +22,10 @@ public class LobbyPlayersView : MonoBehaviour
 
     public GameObject startButton;
 
+    public UnityEngine.Color spaceTeamColor = new UnityEngine.Color(0.5f, 0.8f, 1f);
+    public UnityEngine.Color groundTeamColor = new UnityEngine.Color(0.8f, 0.5f, 0.5f);
+    public UnityEngine.Color defaultColor = new UnityEngine.Color(1f, 1f, 1f);
+
     private void Start()
     {
         if (SteamManager.Instance == null || !SteamManager.Instance.ConnectedToSteam())
@@ -150,7 +154,18 @@ public class LobbyPlayersView : MonoBehaviour
         var playerState = PlayerStateManager.Instance.GetPlayerState(steamId);
         if (playerState != null)
         {
-            SetPlayerItemColor(steamId, playerState.Role == PlayerRole.SpaceStation ? new UnityEngine.Color(0.5f, 0.8f, 1f) : new UnityEngine.Color(0.8f, 0.5f, 0.5f));
+            switch (playerState.Role)
+            {
+                case PlayerRole.SpaceStation:
+                    SetPlayerItemColor(steamId, spaceTeamColor);
+                    break;
+                case PlayerRole.GroundControl:
+                    SetPlayerItemColor(steamId, groundTeamColor);
+                    break;
+                default:
+                    SetPlayerItemColor(steamId, defaultColor);
+                    break;
+            }
         }
     }
 
