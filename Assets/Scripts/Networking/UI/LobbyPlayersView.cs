@@ -142,15 +142,16 @@ public class LobbyPlayersView : MonoBehaviour
         var text = Instantiate(playerItemTextPrefab, contentRoot);
         text.text = name;
 
+
+        // Store reference for future updates (e.g. role changes)
+        playerItems[steamId] = text.gameObject;
+
         // Set initial color based on role
         var playerState = PlayerStateManager.Instance.GetPlayerState(steamId);
         if (playerState != null)
         {
             SetPlayerItemColor(steamId, playerState.Role == PlayerRole.SpaceStation ? new UnityEngine.Color(0.5f, 0.8f, 1f) : new UnityEngine.Color(0.8f, 0.5f, 0.5f));
         }
-
-        // Store reference for future updates (e.g. role changes)
-        playerItems[steamId] = text.gameObject;
     }
 
     private void AddPlaceholder(string message)

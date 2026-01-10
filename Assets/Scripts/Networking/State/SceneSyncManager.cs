@@ -194,7 +194,7 @@ namespace SatelliteGameJam.Networking.State
 
         private void SendPlayerSceneAssignment(SteamId targetPlayer, NetworkSceneId targetScene)
         {
-            byte[] packet = new byte[15];
+              byte[] packet = new byte[16]; // Type(1) + SteamId(8) + SceneId(2) + Role(1) + Timestamp(4)
             packet[0] = (byte)NetworkMessageType.PlayerSceneState;
             int offset = 1;
             NetworkSerialization.WriteULong(packet, ref offset, targetPlayer);
