@@ -215,4 +215,22 @@ public class LobbyPlayersView : MonoBehaviour
 
         CanStartGame();
     }
+
+    public void StartGame()
+    {
+        // Initiate collective scene change if local player owns the lobby
+        if (SteamManager.Instance == null || SceneSyncManager.Instance == null)
+        {
+            Debug.LogWarning("Cannot start game - missing SteamManager or SceneSyncManager.");
+            return;
+        }
+
+        if (!SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
+        {
+            Debug.LogWarning("Cannot start game - you are not the lobby owner.");
+            return;
+        }
+
+        SceneSyncManager.Instance.RequestStartGame();
+    }
 }

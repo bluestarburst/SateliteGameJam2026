@@ -53,7 +53,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SteamManager
   gameAppId: 480
   gameSceneName: Lobby
-  autoCreateLobbyForTesting: 0
+  autoCreateLobbyForTesting: 1
 --- !u!114 &7202338266808824058
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -93,7 +93,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e9238838b39ce4f428621adad4349d5f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.SceneSyncManager
-  sceneChangeTimeout: 10
+  lobbySceneName: Lobby
+  groundControlSceneName: BaseStation
+  spaceStationSceneName: Satellite
+  sceneChangeTimeoutSeconds: 10
+  logDebug: 1
 --- !u!114 &-470972542733557889
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -138,6 +142,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.VoiceSessionManager
   spaceProximityRadius: 20
   enableDebugLogs: 0
+  LobbyScene: Lobby
 --- !u!114 &1268712716605031959
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -10,234 +10,233 @@ using SatelliteGameJam.Networking.Core;
 namespace SatelliteGameJam.Networking.State
 {
     /// <summary>
-    /// Coordinates scene transitions across the network.
-    /// Handles scene change requests/acknowledgments and load barriers to ensure all players sync up.
-    /// Works with PlayerStateManager to track who is where.
+    /// Coordinates collective scene transitions. Owner broadcasts target scenes per player
+    /// using PlayerSceneState messages. Each client loads its scene upon receiving its own assignment
+    /// and sends an acknowledgement.
     /// </summary>
     public class SceneSyncManager : MonoBehaviour
-{
-    public static SceneSyncManager Instance { get; private set; }
-
-    [Header("Scene Sync Settings")]
-    [SerializeField] private float sceneChangeTimeout = 10f; // Seconds to wait for all acks
-
-    // Scene change coordination
-    private NetworkSceneId pendingSceneChange = NetworkSceneId.None;
-    private HashSet<SteamId> receivedAcknowledgments = new();
-    private float sceneChangeRequestTime;
-    private bool awaitingSceneChange = false;
-
-    // Events
-    public event Action<NetworkSceneId> OnSceneChangeRequested;
-    public event Action<NetworkSceneId> OnAllPlayersReady; // All players acked the scene change
-    public event Action<SteamId, NetworkSceneId> OnPlayerSceneChangeAck;
-
-    private void Awake()
     {
-        if (Instance != null && Instance != this)
+        public static SceneSyncManager Instance { get; private set; }
+
+        [Header("Scene Names")]
+        [SerializeField] private string lobbySceneName = "Lobby";
+        [SerializeField] private string groundControlSceneName = "GroundControl";
+        [SerializeField] private string spaceStationSceneName = "SpaceStation";
+
+        [Header("Behavior")]
+        [SerializeField] private float sceneChangeTimeoutSeconds = 10f;
+        [SerializeField] private bool logDebug = true;
+
+        private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
+
+        private void Awake()
         {
-            Destroy(gameObject);
-            return;
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            if (NetworkConnectionManager.Instance != null)
+            {
+                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
+                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeAcknowledge, OnReceiveSceneChangeAcknowledge);
+            }
+
+            if (PlayerStateManager.Instance != null)
+            {
+                PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+            }
+
+            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
-
-        // Register message handlers
-        if (NetworkConnectionManager.Instance != null)
+        private void OnDestroy()
         {
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeAcknowledge, OnReceiveSceneChangeAck);
+            if (NetworkConnectionManager.Instance != null)
+            {
+                NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
+                NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.SceneChangeAcknowledge, OnReceiveSceneChangeAcknowledge);
+            }
+            if (PlayerStateManager.Instance != null)
+            {
+                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
+            }
+            SceneManager.sceneLoaded -= OnSceneLoaded;
         }
 
-        // Subscribe to Unity scene events
-        SceneManager.sceneLoaded += OnUnitySceneLoaded;
-    }
-
-    private void OnDestroy()
-    {
-        SceneManager.sceneLoaded -= OnUnitySceneLoaded;
-    }
-
-    private void Update()
-    {
-        // Timeout check for scene changes
-        if (awaitingSceneChange && Time.time - sceneChangeRequestTime > sceneChangeTimeout)
+        /// <summary>
+        /// Owner initiates game start: assigns scenes by role and broadcasts to all.
+        /// </summary>
+        public void RequestStartGame()
         {
-            Debug.LogWarning($"[SceneSyncManager] Scene change timeout - not all players acknowledged {pendingSceneChange}");
-            // Proceed anyway or handle timeout logic
-            CompleteSceneChange();
-        }
-    }
-
-    /// <summary>
-    /// Requests a scene change for all players. Typically called by the host/lobby leader.
-    /// </summary>
-    public void RequestSceneChange(NetworkSceneId newScene)
-    {
-        if (awaitingSceneChange)
-        {
-            Debug.LogWarning($"[SceneSyncManager] Already awaiting scene change to {pendingSceneChange}");
-            return;
+            if (!IsOwner())
+            {
+                if (logDebug) Debug.Log("[SceneSync] Not lobby owner; cannot start game.");
+                return;
+            }
+            BroadcastRoleBasedScenes();
+            BeginAckWindow();
         }
 
-        Debug.Log($"[SceneSyncManager] Requesting scene change to {newScene}");
-        
-        pendingSceneChange = newScene;
-        awaitingSceneChange = true;
-        sceneChangeRequestTime = Time.time;
-        receivedAcknowledgments.Clear();
-
-        // Broadcast scene change request
-        BroadcastSceneChangeRequest(newScene);
-        
-        OnSceneChangeRequested?.Invoke(newScene);
-    }
-
-    /// <summary>
-    /// Acknowledges a scene change request. Called after local scene load completes.
-    /// </summary>
-    public void AcknowledgeSceneChange(NetworkSceneId sceneId)
-    {
-        SteamId localId = SteamManager.Instance.PlayerSteamId;
-        
-        Debug.Log($"[SceneSyncManager] Acknowledging scene change to {sceneId}");
-        
-        // Broadcast acknowledgment
-        BroadcastSceneChangeAck(localId, sceneId);
-        
-        // Update player state
-        if (PlayerStateManager.Instance != null)
+        /// <summary>
+        /// Owner initiates end game: sends all players back to lobby.
+        /// </summary>
+        public void RequestEndGame()
         {
-            PlayerStateManager.Instance.SetLocalPlayerScene(sceneId);
+            if (!IsOwner())
+            {
+                if (logDebug) Debug.Log("[SceneSync] Not lobby owner; cannot end game.");
+                return;
+            }
+            BroadcastSceneForAll(NetworkSceneId.Lobby);
+            BeginAckWindow();
+        }
+
+        private bool IsOwner()
+        {
+            return SteamManager.Instance != null && SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId);
+        }
+
+        private void BroadcastRoleBasedScenes()
+        {
+            if (SteamManager.Instance == null || PlayerStateManager.Instance == null) return;
+
+            var members = SteamManager.Instance.currentLobby.Members.ToList();
+            foreach (var member in members)
+            {
+                var state = PlayerStateManager.Instance.GetPlayerState(member.Id);
+                NetworkSceneId target = state.Role == PlayerRole.SpaceStation
+                    ? NetworkSceneId.SpaceStation
+                    : NetworkSceneId.GroundControl;
+
+                if (member.Id == SteamManager.Instance.PlayerSteamId)
+                {
+                    // Set local immediately so we also load
+                    PlayerStateManager.Instance.SetLocalPlayerScene(target);
+                }
+                else
+                {
+                    SendPlayerSceneAssignment(member.Id, target);
+                }
+            }
+        }
+
+        private void BroadcastSceneForAll(NetworkSceneId target)
+        {
+            if (SteamManager.Instance == null) return;
+            var members = SteamManager.Instance.currentLobby.Members.ToList();
+            foreach (var member in members)
+            {
+                if (member.Id == SteamManager.Instance.PlayerSteamId)
+                {
+                    PlayerStateManager.Instance.SetLocalPlayerScene(target);
+                }
+                else
+                {
+                    SendPlayerSceneAssignment(member.Id, target);
+                }
+            }
+        }
+
+        private void BeginAckWindow()
+        {
+            pendingAcks.Clear();
+            if (SteamManager.Instance == null) return;
+            foreach (var m in SteamManager.Instance.currentLobby.Members)
+            {
+                if (m.Id != SteamManager.Instance.PlayerSteamId)
+                    pendingAcks.Add(m.Id);
+            }
+            Invoke(nameof(CheckAckTimeout), sceneChangeTimeoutSeconds);
+        }
+
+        private void CheckAckTimeout()
+        {
+            if (pendingAcks.Count > 0 && logDebug)
+            {
+                Debug.Log($"[SceneSync] Ack timeout. Missing: {string.Join(", ", pendingAcks.Select(id => id.Value))}");
+            }
+        }
+
+        private void OnPlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
+        {
+            if (steamId != SteamManager.Instance?.PlayerSteamId) return;
+
+            string sceneName = ResolveSceneName(sceneId);
+            if (string.IsNullOrEmpty(sceneName))
+            {
+                if (logDebug) Debug.LogWarning($"[SceneSync] No scene name mapped for {sceneId}");
+                return;
+            }
+
+            if (logDebug) Debug.Log($"[SceneSync] Loading scene '{sceneName}' for local player");
+            SceneManager.LoadScene(sceneName);
+        }
+
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            SendSceneAck();
+        }
+
+        private string ResolveSceneName(NetworkSceneId sceneId)
+        {
+            switch (sceneId)
+            {
+                case NetworkSceneId.Lobby: return lobbySceneName;
+                case NetworkSceneId.GroundControl: return groundControlSceneName;
+                case NetworkSceneId.SpaceStation: return spaceStationSceneName;
+                default: return string.Empty;
+            }
+        }
+
+        private void SendPlayerSceneAssignment(SteamId targetPlayer, NetworkSceneId targetScene)
+        {
+            byte[] packet = new byte[15];
+            packet[0] = (byte)NetworkMessageType.PlayerSceneState;
+            int offset = 1;
+            NetworkSerialization.WriteULong(packet, ref offset, targetPlayer);
+            packet[offset++] = (byte)(((ushort)targetScene) >> 8);
+            packet[offset++] = (byte)(((ushort)targetScene) & 0xFF);
+            var role = PlayerStateManager.Instance?.GetPlayerState(targetPlayer).Role ?? PlayerRole.None;
+            packet[offset++] = (byte)role;
+            NetworkSerialization.WriteFloat(packet, ref offset, Time.time);
+
+            NetworkConnectionManager.Instance.SendToAll(packet, 4, P2PSend.Reliable);
+        }
+
+        private void SendSceneAck()
+        {
+            byte[] packet = new byte[11];
+            packet[0] = (byte)NetworkMessageType.SceneChangeAcknowledge;
+            int offset = 1;
+            NetworkSerialization.WriteULong(packet, ref offset, SteamManager.Instance.PlayerSteamId);
+            var currentState = PlayerStateManager.Instance?.GetPlayerState(SteamManager.Instance.PlayerSteamId);
+            var sceneId = currentState?.Scene ?? NetworkSceneId.None;
+            packet[offset++] = (byte)(((ushort)sceneId) >> 8);
+            packet[offset++] = (byte)(((ushort)sceneId) & 0xFF);
+            NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
+        }
+
+        private void OnReceiveSceneChangeRequest(SteamId sender, byte[] data)
+        {
+            if (logDebug) Debug.Log($"[SceneSync] Received SceneChangeRequest from {sender}");
+        }
+
+        private void OnReceiveSceneChangeAcknowledge(SteamId sender, byte[] data)
+        {
+            if (data.Length < 11) return;
+            int offset = 1;
+            SteamId who = NetworkSerialization.ReadULong(data, ref offset);
+            ushort sceneIdValue = (ushort)((data[offset++] << 8) | data[offset++]);
+            NetworkSceneId sceneId = (NetworkSceneId)sceneIdValue;
+
+            if (pendingAcks.Remove(who) && logDebug)
+            {
+                Debug.Log($"[SceneSync] Ack from {who} for scene {sceneId}. Remaining: {pendingAcks.Count}");
+            }
         }
     }
-
-    /// <summary>
-    /// Checks if all expected players have acknowledged the scene change.
-    /// </summary>
-    private void CheckAllPlayersReady()
-    {
-        if (!awaitingSceneChange) return;
-
-        // Get current lobby members
-        if (SteamManager.Instance?.currentLobby == null) return;
-        
-        var expectedPlayers = SteamManager.Instance.currentLobby.Members
-            .Select(m => m.Id)
-            .Where(id => id != SteamManager.Instance.PlayerSteamId) // Exclude self
-            .ToHashSet();
-
-        // Check if all have acked
-        if (expectedPlayers.All(id => receivedAcknowledgments.Contains(id)))
-        {
-            Debug.Log($"[SceneSyncManager] All players ready for scene {pendingSceneChange}");
-            CompleteSceneChange();
-        }
-    }
-
-    private void CompleteSceneChange()
-    {
-        awaitingSceneChange = false;
-        OnAllPlayersReady?.Invoke(pendingSceneChange);
-        pendingSceneChange = NetworkSceneId.None;
-        receivedAcknowledgments.Clear();
-    }
-
-    /// <summary>
-    /// Called when Unity finishes loading a scene locally.
-    /// </summary>
-    private void OnUnitySceneLoaded(Scene scene, LoadSceneMode mode)
-    {
-        Debug.Log($"[SceneSyncManager] Unity scene loaded: {scene.name}");
-        
-        // Map Unity scene name to NetworkSceneId (you'll need to customize this)
-        NetworkSceneId sceneId = MapUnitySceneToNetworkScene(scene.name);
-        
-        // Auto-acknowledge if we were waiting for this scene
-        if (sceneId != NetworkSceneId.None && sceneId == pendingSceneChange)
-        {
-            AcknowledgeSceneChange(sceneId);
-        }
-    }
-
-    /// <summary>
-    /// Maps Unity scene names to NetworkSceneId enum values.
-    /// Customize this based on your actual scene names.
-    /// </summary>
-    private NetworkSceneId MapUnitySceneToNetworkScene(string sceneName)
-    {
-        return sceneName.ToLower() switch
-        {
-            "lobby" => NetworkSceneId.Lobby,
-            "groundcontrol" => NetworkSceneId.GroundControl,
-            "spacestation" => NetworkSceneId.SpaceStation,
-            _ => NetworkSceneId.None
-        };
-    }
-
-    // ===== Message Sending =====
-
-    private void BroadcastSceneChangeRequest(NetworkSceneId sceneId)
-    {
-        byte[] packet = new byte[11];
-        packet[0] = (byte)NetworkMessageType.SceneChangeRequest;
-        int offset = 1;
-        NetworkSerialization.WriteULong(packet, ref offset, SteamManager.Instance.PlayerSteamId);
-        packet[offset++] = (byte)((ushort)sceneId >> 8);
-        packet[offset++] = (byte)((ushort)sceneId & 0xFF);
-        NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
-    }
-
-    private void BroadcastSceneChangeAck(SteamId steamId, NetworkSceneId sceneId)
-    {
-        byte[] packet = new byte[11];
-        packet[0] = (byte)NetworkMessageType.SceneChangeAcknowledge;
-        int offset = 1;
-        NetworkSerialization.WriteULong(packet, ref offset, steamId);
-        packet[offset++] = (byte)((ushort)sceneId >> 8);
-        packet[offset++] = (byte)((ushort)sceneId & 0xFF);
-        NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
-    }
-
-    // ===== Message Receiving =====
-
-    private void OnReceiveSceneChangeRequest(SteamId sender, byte[] data)
-    {
-        if (data.Length < 11) return;
-        
-        int offset = 1;
-        SteamId requesterId = NetworkSerialization.ReadULong(data, ref offset);
-        ushort sceneIdValue = (ushort)((data[offset++] << 8) | data[offset++]);
-        NetworkSceneId sceneId = (NetworkSceneId)sceneIdValue;
-        
-        Debug.Log($"[SceneSyncManager] Received scene change request to {sceneId} from {requesterId}");
-        
-        pendingSceneChange = sceneId;
-        awaitingSceneChange = true;
-        sceneChangeRequestTime = Time.time;
-        receivedAcknowledgments.Clear();
-        
-        OnSceneChangeRequested?.Invoke(sceneId);
-        
-        // TODO: Trigger local scene load here or let game logic handle it via the event
-    }
-
-    private void OnReceiveSceneChangeAck(SteamId sender, byte[] data)
-    {
-        if (data.Length < 11) return;
-        
-        int offset = 1;
-        SteamId playerId = NetworkSerialization.ReadULong(data, ref offset);
-        ushort sceneIdValue = (ushort)((data[offset++] << 8) | data[offset++]);
-        NetworkSceneId sceneId = (NetworkSceneId)sceneIdValue;
-        
-        Debug.Log($"[SceneSyncManager] Received ack from {playerId} for scene {sceneId}");
-        
-        receivedAcknowledgments.Add(playerId);
-        OnPlayerSceneChangeAck?.Invoke(playerId, sceneId);
-        
-        CheckAllPlayersReady();
-    }
-}
 }
