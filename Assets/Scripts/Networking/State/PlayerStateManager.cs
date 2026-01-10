@@ -222,7 +222,7 @@ namespace SatelliteGameJam.Networking.State
 
     private void OnReceivePlayerSceneState(SteamId sender, byte[] data)
     {
-           if (data.Length < 16) return;
+        if (data.Length < 16) return;
         
         int offset = 1;
         SteamId playerId = NetworkSerialization.ReadULong(data, ref offset);
@@ -233,6 +233,12 @@ namespace SatelliteGameJam.Networking.State
         
         UpdatePlayerState(playerId, scene: sceneId, role: role);
         OnPlayerSceneChanged?.Invoke(playerId, sceneId);
+
+        // If this assignment targets the local player, proactively acknowledge
+        if (playerId == SteamManager.Instance.PlayerSteamId && SceneSyncManager.Instance != null)
+        {
+            SceneSyncManager.Instance.AcknowledgeCurrentScene();
+        }
     }
 }
 

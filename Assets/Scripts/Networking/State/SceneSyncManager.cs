@@ -39,18 +39,26 @@ namespace SatelliteGameJam.Networking.State
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            if (NetworkConnectionManager.Instance != null)
+            RegisterHandlers();
+            SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        private void RegisterHandlers()
+        {
+            if (NetworkConnectionManager.Instance == null)
             {
-                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
-                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeAcknowledge, OnReceiveSceneChangeAcknowledge);
+                Debug.LogWarning("[SceneSync] NetworkConnectionManager not found. Retrying...");
+                Invoke(nameof(RegisterHandlers), 0.5f);
+                return;
             }
+
+            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
+            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeAcknowledge, OnReceiveSceneChangeAcknowledge);
 
             if (PlayerStateManager.Instance != null)
             {
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
             }
-
-            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
         private void OnDestroy()
@@ -97,7 +105,10 @@ namespace SatelliteGameJam.Networking.State
 
         private bool IsOwner()
         {
-            return SteamManager.Instance != null && SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId);
+            if (SteamManager.Instance == null) return false;
+            var lobby = SteamManager.Instance.currentLobby;
+            if (lobby.Id.Value == 0) return false;
+            return lobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId);
         }
 
         private void BroadcastRoleBasedScenes()
@@ -145,19 +156,32 @@ namespace SatelliteGameJam.Networking.State
         {
             pendingAcks.Clear();
             if (SteamManager.Instance == null) return;
+            
+            // Cancel any pending timeout checks
+            CancelInvoke(nameof(CheckAckTimeout));
+            
             foreach (var m in SteamManager.Instance.currentLobby.Members)
             {
                 if (m.Id != SteamManager.Instance.PlayerSteamId)
                     pendingAcks.Add(m.Id);
             }
-            Invoke(nameof(CheckAckTimeout), sceneChangeTimeoutSeconds);
+            
+            if (pendingAcks.Count > 0)
+            {
+                Invoke(nameof(CheckAckTimeout), sceneChangeTimeoutSeconds);
+            }
         }
 
         private void CheckAckTimeout()
         {
-            if (pendingAcks.Count > 0 && logDebug)
+            if (pendingAcks.Count > 0)
             {
-                Debug.Log($"[SceneSync] Ack timeout. Missing: {string.Join(", ", pendingAcks.Select(id => id.Value))}");
+                if (logDebug)
+                {
+                    Debug.LogWarning($"[SceneSync] Ack timeout. Missing: {string.Join(", ", pendingAcks.Select(id => id.Value))}");
+                }
+                // Clear pending acks to prevent stale state
+                pendingAcks.Clear();
             }
         }
 
@@ -209,6 +233,12 @@ namespace SatelliteGameJam.Networking.State
 
         private void SendSceneAck()
         {
+            if (SteamManager.Instance == null || NetworkConnectionManager.Instance == null)
+            {
+                if (logDebug) Debug.LogWarning("[SceneSync] Cannot send ack - manager not ready");
+                return;
+            }
+
             byte[] packet = new byte[11];
             packet[0] = (byte)NetworkMessageType.SceneChangeAcknowledge;
             int offset = 1;
@@ -218,6 +248,13 @@ namespace SatelliteGameJam.Networking.State
             packet[offset++] = (byte)(((ushort)sceneId) >> 8);
             packet[offset++] = (byte)(((ushort)sceneId) & 0xFF);
             NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
+            
+            if (logDebug) Debug.Log($"[SceneSync] Sent ack for scene {sceneId}");
+        }
+
+        public void AcknowledgeCurrentScene()
+        {
+            SendSceneAck();
         }
 
         private void OnReceiveSceneChangeRequest(SteamId sender, byte[] data)
@@ -233,9 +270,19 @@ namespace SatelliteGameJam.Networking.State
             ushort sceneIdValue = (ushort)((data[offset++] << 8) | data[offset++]);
             NetworkSceneId sceneId = (NetworkSceneId)sceneIdValue;
 
-            if (pendingAcks.Remove(who) && logDebug)
+            if (pendingAcks.Remove(who))
             {
-                Debug.Log($"[SceneSync] Ack from {who} for scene {sceneId}. Remaining: {pendingAcks.Count}");
+                if (logDebug)
+                {
+                    Debug.Log($"[SceneSync] Ack from {who} for scene {sceneId}. Remaining: {pendingAcks.Count}");
+                }
+                
+                // All acks received - cancel timeout
+                if (pendingAcks.Count == 0)
+                {
+                    CancelInvoke(nameof(CheckAckTimeout));
+                    if (logDebug) Debug.Log("[SceneSync] All players acknowledged scene change");
+                }
             }
         }
     }
