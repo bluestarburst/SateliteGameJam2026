@@ -1,17 +1,22 @@
 using UnityEngine;
 using Steamworks.Data;
+using System.Collections.Generic;
+using System.Linq;
+using SatelliteGameJam.Networking.Core.Abstractions;
 
 namespace SatelliteGameJam.Networking.Core
 {
     /// <summary>
     /// Centralized configuration for all networking settings.
     /// Use this scriptable object to adjust networking behavior from the Unity Inspector.
-    /// Ref: DeveloperExperienceImprovements.md Part 1
+    /// Ref: DeveloperExperienceImprovements.md Part 1 & Part 6
     /// </summary>
     [CreateAssetMenu(fileName = "NetworkingConfiguration", menuName = "Networking/Configuration", order = 1)]
     public class NetworkingConfiguration : ScriptableObject
     {
         [Header("Connection Settings")]
+        [Tooltip("Steam App ID for initialization")]
+        public uint steamAppId = 480;
         [Tooltip("Channels to poll for incoming packets (0=control, 1=high-freq, 2=voice, 3=interactions, 4=low-freq)")]
         public int[] channelsToPoll = new[] { 0, 1, 3, 4 }; // Exclude voice channel 2 (handled by VoiceChatP2P)
         
@@ -108,6 +113,19 @@ namespace SatelliteGameJam.Networking.Core
         [Range(1f, 10f)]
         public float reconnectDelaySeconds = 2f;
 
+        [Header("Part 6: Extensibility")]
+        [Tooltip("Use the extensible INetworkMessage system (allows custom message types without code changes)")]
+        public bool useExtensibleMessageSystem = false;
+        
+        [Tooltip("Automatically register built-in message types on startup")]
+        public bool autoRegisterBuiltinMessages = true;
+        
+        [Tooltip("Custom assembly names to load message types from (format: AssemblyName)")]
+        public List<string> customMessageAssemblies = new List<string>();
+        
+        [Tooltip("Transport layer to use (Steam P2P, Mock, etc.) - future enhancement")]
+        public string transportLayerType = "SteamP2PTransport";
+
         // Helper methods for code access
         
         /// <summary>
@@ -171,6 +189,64 @@ namespace SatelliteGameJam.Networking.Core
             if (channelsToPoll == null || channelsToPoll.Length == 0)
             {
                 Debug.LogError("[NetworkingConfiguration] channelsToPoll is empty! No packets will be received!");
+            }
+        }
+
+        /// <summary>
+        /// Part 6: Load custom message types from external assemblies.
+        /// Allows projects to inject domain-specific messages without core changes.
+        /// </summary>
+        public void LoadCustomMessages()
+        {
+            if (!useExtensibleMessageSystem)
+                return;
+
+            if (!autoRegisterBuiltinMessages)
+            {
+                Debug.Log("[NetworkingConfiguration] Skipping built-in message registration (autoRegisterBuiltinMessages = false)");
+                return;
+            }
+
+            // Register built-in Satellite Game message types
+            // In a real multi-project scenario, this would be in a separate "SatelliteGameNetworking" assembly
+            try
+            {
+                var registry = NetworkMessageRegistry.Instance;
+                
+                // Example registrations - in real use, these would be auto-discovered or manually registered in game code
+                Debug.Log("[NetworkingConfiguration] Built-in message type registration ready. " +
+                    "Call NetworkMessageRegistry.Instance.RegisterMessageType<T>(id) for each custom message type.");
+                
+                // Note: Actual registration should happen in game initialization code, not here
+                // This is just a placeholder to show where the feature would be used
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[NetworkingConfiguration] Failed to load built-in messages: {ex}");
+            }
+
+            // Load custom assemblies if specified
+            foreach (var assemblyName in customMessageAssemblies)
+            {
+                if (string.IsNullOrEmpty(assemblyName))
+                    continue;
+
+                try
+                {
+                    var assembly = System.Reflection.Assembly.Load(assemblyName);
+                    var messageTypes = assembly.GetTypes()
+                        .Where(t => typeof(INetworkMessage).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
+                        .ToList();
+
+                    Debug.Log($"[NetworkingConfiguration] Found {messageTypes.Count} message types in assembly {assemblyName}");
+
+                    // Note: Actual registration would require metadata attributes to determine message IDs
+                    // This is left as a future enhancement
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[NetworkingConfiguration] Failed to load message assembly {assemblyName}: {ex}");
+                }
             }
         }
 

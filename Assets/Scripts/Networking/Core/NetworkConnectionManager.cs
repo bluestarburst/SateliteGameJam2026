@@ -7,6 +7,7 @@ using UnityEngine;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Identity;
 using SatelliteGameJam.Networking.Debugging;
+using SatelliteGameJam.Networking.Core.Abstractions;
 
 namespace SatelliteGameJam.Networking.Core
 {
@@ -14,13 +15,27 @@ namespace SatelliteGameJam.Networking.Core
     /// Central packet router for all network messages.
     /// Routes packets by channel and message type to registered handlers.
     /// Does NOT track peers - queries SteamManager.Instance.currentLobby.Members for peer list.
+    /// 
+    /// Part 6 Extensibility Features:
+    /// - Supports both legacy NetworkMessageType enum handlers and new INetworkMessage handlers
+    /// - Uses NetworkHandlerRegistry for extensible message handling
+    /// - Uses INetworkTransport abstraction for pluggable transport layer
+    /// 
+    /// Reference: DeveloperExperienceImprovements.md Part 6
     /// </summary>
     public class NetworkConnectionManager : MonoBehaviour
 {
     public static NetworkConnectionManager Instance { get; private set; }
 
-    // Handler registration - maps message types to handlers
+    // Legacy handler registration - maps message types to handlers (for backward compatibility)
     private Dictionary<NetworkMessageType, Action<SteamId, byte[]>> messageHandlers;
+
+    // Part 6: Extensible handler system
+    private NetworkHandlerRegistry handlerRegistry = new NetworkHandlerRegistry();
+    private NetworkMessageRegistry messageRegistry = NetworkMessageRegistry.Instance;
+    
+    // Part 6: Transport abstraction
+    private INetworkTransport transport;
 
     [Header("Configuration")]
     [SerializeField] private NetworkingConfiguration config;
@@ -53,15 +68,39 @@ namespace SatelliteGameJam.Networking.Core
         DontDestroyOnLoad(gameObject);
         messageHandlers = new Dictionary<NetworkMessageType, Action<SteamId, byte[]>>();
 
+        // Part 6: Initialize transport layer
+        InitializeTransport();
+
         // Validate configuration
         if (config != null)
         {
             config.ValidateConfiguration();
+            
+            // Part 6: Load custom message types if configured
+            if (config.useExtensibleMessageSystem)
+            {
+                config.LoadCustomMessages();
+            }
         }
         else
         {
             Debug.LogWarning("[NetworkConnectionManager] No NetworkingConfiguration assigned. Using fallback settings.");
         }
+    }
+
+    /// <summary>
+    /// Part 6: Initialize transport layer based on configuration.
+    /// </summary>
+    private void InitializeTransport()
+    {
+        // Default to Steam P2P transport
+        // In future, could be configured via NetworkingConfiguration
+        transport = new SteamP2PTransport();
+        
+        uint appId = config != null ? config.steamAppId : 480;
+        transport.Initialize(appId);
+        
+        Debug.Log($"[NetworkConnectionManager] Initialized transport: {transport.GetType().Name}");
     }
 
     private void Update()
@@ -95,6 +134,7 @@ namespace SatelliteGameJam.Networking.Core
 
     /// <summary>
     /// Routes a received packet to the appropriate handler based on message type.
+    /// Part 6: Now supports both legacy handlers and extensible INetworkMessage handlers.
     /// </summary>
     private void RoutePacket(SteamId sender, byte[] data)
     {
@@ -111,16 +151,28 @@ namespace SatelliteGameJam.Networking.Core
             return;
         }
 
-        NetworkMessageType msgType = (NetworkMessageType)data[0];
+        byte messageTypeId = data[0];
+
+        // Part 6: Try extensible handler system first if enabled
+        if (config != null && config.useExtensibleMessageSystem && handlerRegistry.HasHandlers(messageTypeId))
+        {
+            handlerRegistry.InvokeHandlers(sender, messageTypeId, data);
+            return;
+        }
+
+        // Legacy handler system (backward compatibility)
+        NetworkMessageType msgType = (NetworkMessageType)messageTypeId;
         if (messageHandlers.TryGetValue(msgType, out var handler))
         {
             handler.Invoke(sender, data); // Pass full data including message type
         }
         else
         {
-            Debug.LogWarning($"No handler registered for message type {msgType}");
+            if (config != null && config.verboseLogging)
+            {
+                Debug.LogWarning($"[NetworkConnectionManager] No handler registered for message type {msgType} (ID: {messageTypeId})");
+            }
         }
-
     }
 
     /// <summary>
@@ -273,6 +325,120 @@ namespace SatelliteGameJam.Networking.Core
         }
         
         spawnedRemotePlayers.Clear();
+    }
+
+    // ===== Part 6: Extensible Message System API =====
+
+    /// <summary>
+    /// Part 6: Register a handler for an extensible message type.
+    /// Use this for new message types implementing INetworkMessage.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// NetworkConnectionManager.Instance.RegisterHandler&lt;PlayerReadyMessage&gt;(OnPlayerReady);
+    /// 
+    /// void OnPlayerReady(SteamId sender, PlayerReadyMessage msg)
+    /// {
+    ///     Debug.Log($"Player {sender} is ready: {msg.IsReady}");
+    /// }
+    /// </code>
+    /// </example>
+    public void RegisterHandler<T>(NetworkMessageHandler<T> handler) where T : INetworkMessage, new()
+    {
+        handlerRegistry.RegisterHandler(handler);
+    }
+
+    /// <summary>
+    /// Part 6: Unregister a handler for an extensible message type.
+    /// </summary>
+    public void UnregisterHandler<T>(NetworkMessageHandler<T> handler) where T : INetworkMessage, new()
+    {
+        handlerRegistry.UnregisterHandler(handler);
+    }
+
+    /// <summary>
+    /// Part 6: Send a message to a specific peer using the extensible message system.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// var msg = new PlayerReadyMessage(steamId, true);
+    /// NetworkConnectionManager.Instance.SendMessage(targetId, msg);
+    /// </code>
+    /// </example>
+    public void SendMessage<T>(SteamId target, T message) where T : INetworkMessage
+    {
+        byte[] data = message.Serialize();
+        P2PSend sendType = message.RequireReliable ? P2PSend.Reliable : P2PSend.UnreliableNoDelay;
+        
+        if (transport != null)
+        {
+            transport.SendPacket(target, data, message.Channel, message.RequireReliable);
+        }
+        else
+        {
+            // Fallback to legacy system
+            SendTo(target, data, message.Channel, sendType);
+        }
+
+        // Record packet for debug overlay
+        if (config != null && config.showPacketStatistics)
+        {
+            NetworkDebugOverlay.Instance?.RecordPacketSent(data.Length);
+        }
+    }
+
+    /// <summary>
+    /// Part 6: Broadcast a message to all peers using the extensible message system.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// var msg = new SatelliteHealthMessage(currentHealth, damageBits);
+    /// NetworkConnectionManager.Instance.SendMessageToAll(msg);
+    /// </code>
+    /// </example>
+    public void SendMessageToAll<T>(T message) where T : INetworkMessage
+    {
+        if (SteamManager.Instance?.currentLobby.MemberCount == 0)
+        {
+            Debug.LogWarning("[NetworkConnectionManager] Cannot broadcast message - not in lobby");
+            return;
+        }
+
+        foreach (var member in SteamManager.Instance.currentLobby.Members)
+        {
+            if (member.Id != SteamManager.Instance.PlayerSteamId)
+            {
+                SendMessage(member.Id, message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Part 6: Get the transport layer instance.
+    /// Useful for testing or advanced use cases.
+    /// </summary>
+    public INetworkTransport GetTransport() => transport;
+
+    /// <summary>
+    /// Part 6: Set a custom transport layer.
+    /// Useful for testing (e.g., MockTransport) or switching to different backends.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// // For testing:
+    /// var mockTransport = new MockTransport();
+    /// NetworkConnectionManager.Instance.SetTransport(mockTransport);
+    /// </code>
+    /// </example>
+    public void SetTransport(INetworkTransport newTransport)
+    {
+        if (transport != null)
+        {
+            transport.Shutdown();
+        }
+        
+        transport = newTransport;
+        Debug.Log($"[NetworkConnectionManager] Switched to transport: {transport.GetType().Name}");
     }
 }
 }
