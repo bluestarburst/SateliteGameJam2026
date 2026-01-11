@@ -202,6 +202,12 @@ namespace SatelliteGameJam.Networking.State
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            // Quick Fix #1: Clean up remote player models when transitioning scenes
+            if (NetworkConnectionManager.Instance != null)
+            {
+                NetworkConnectionManager.Instance.CleanupAllRemotePlayers();
+            }
+            
             SendSceneAck();
         }
 

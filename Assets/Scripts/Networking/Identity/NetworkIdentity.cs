@@ -36,12 +36,21 @@ namespace SatelliteGameJam.Networking.Identity
     
     /// <summary>
     /// Gets a NetworkIdentity by its network ID.
+    /// Quick Fix #2: Added scene safety check to prevent cross-scene contamination.
     /// </summary>
     public static NetworkIdentity GetById(uint id)
     {
-        // Lookup by network ID
+        // Lookup by network ID with validation
         if (registry.TryGetValue(id, out var identity))
         {
+            // Validate the object still exists and hasn't been destroyed
+            if (identity == null || identity.gameObject == null)
+            {
+                Debug.LogWarning($"[NetworkIdentity] Object with ID {id} was destroyed but still in registry. Cleaning up.");
+                registry.Remove(id);
+                return null;
+            }
+            
             return identity;
         }
         return null;

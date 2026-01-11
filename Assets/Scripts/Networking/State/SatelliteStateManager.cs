@@ -204,7 +204,29 @@ namespace SatelliteGameJam.Networking.State
         int offset = 1;
         NetworkSerialization.WriteFloat(packet, ref offset, health);
         NetworkSerialization.WriteUInt(packet, ref offset, damageBits);
-        NetworkConnectionManager.Instance.SendToAll(packet, 4, P2PSend.Reliable);
+        
+        // Quick Fix #3: Only send satellite health to Space Station players
+        if (PlayerStateManager.Instance != null && SteamManager.Instance?.currentLobby != null)
+        {
+            foreach (var member in SteamManager.Instance.currentLobby.Members)
+            {
+                if (member.Id == SteamManager.Instance.PlayerSteamId)
+                    continue;
+                    
+                var playerState = PlayerStateManager.Instance.GetPlayerState(member.Id);
+                
+                // Only send to players in Space Station scene
+                if (playerState.Scene == NetworkSceneId.SpaceStation)
+                {
+                    NetworkConnectionManager.Instance.SendTo(member.Id, packet, 4, P2PSend.Reliable);
+                }
+            }
+        }
+        else
+        {
+            // Fallback: send to all if player state not available
+            NetworkConnectionManager.Instance.SendToAll(packet, 4, P2PSend.Reliable);
+        }
     }
 
     private void BroadcastPartTransform(PartTransformData part)

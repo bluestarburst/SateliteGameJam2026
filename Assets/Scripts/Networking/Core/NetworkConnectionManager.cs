@@ -221,5 +221,25 @@ namespace SatelliteGameJam.Networking.Core
             spawnedRemotePlayers.Remove(steamId);
         }
     }
+
+    /// <summary>
+    /// Cleans up all spawned remote player models.
+    /// Call this on scene transitions to prevent player model leaks.
+    /// Quick Fix #1: Player model cleanup on scene transition.
+    /// </summary>
+    public void CleanupAllRemotePlayers()
+    {
+        Debug.Log($"[NetworkConnectionManager] Cleaning up {spawnedRemotePlayers.Count} remote player models");
+        
+        foreach (var kvp in spawnedRemotePlayers)
+        {
+            if (kvp.Value != null)
+            {
+                Destroy(kvp.Value);
+            }
+        }
+        
+        spawnedRemotePlayers.Clear();
+    }
 }
 }
