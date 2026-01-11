@@ -26,8 +26,12 @@ public class LobbyPlayersView : MonoBehaviour
     public UnityEngine.Color groundTeamColor = new UnityEngine.Color(0.8f, 0.5f, 0.5f);
     public UnityEngine.Color defaultColor = new UnityEngine.Color(1f, 1f, 1f);
 
+    public bool gateStartButton = true;
+
     private void Start()
     {
+        startButton.SetActive(false);
+
         if (SteamManager.Instance == null || !SteamManager.Instance.ConnectedToSteam())
         {
             Debug.Log("Steam not initialized; cannot display lobby players.");
@@ -66,6 +70,12 @@ public class LobbyPlayersView : MonoBehaviour
 
     private void CanStartGame()
     {
+        if (gateStartButton == false)
+        {
+            startButton.SetActive(true);
+            return;
+        }
+
         if (SteamManager.Instance == null || !SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
         {
             Debug.Log("Cannot start game - not enough players.");

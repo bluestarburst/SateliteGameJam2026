@@ -1973,6 +1973,26 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 4870160641741068829, guid: 3b386ab91786349aa881c8e7c283185c, type: 3}
   m_PrefabInstance: {fileID: 1277032318}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1422860936 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2231938572761584968, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+  m_PrefabInstance: {fileID: 1188896197944727657}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1422860939
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1422860936}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7dfa6acd5735e4054bb012b4ed4c800a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SteamManager
+  gameAppId: 480
+  gameSceneName: Lobby
+  autoCreateLobbyForTesting: 0
 --- !u!1 &1449742099
 GameObject:
   m_ObjectHideFlags: 0
@@ -2804,11 +2824,18 @@ PrefabInstance:
       propertyPath: m_Name
       value: SteamPack
       objectReference: {fileID: 0}
+    - target: {fileID: 3291827678534669956, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      propertyPath: useMockSteam
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 0}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2231938572761584968, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1422860939}
   m_SourcePrefab: {fileID: 100100000, guid: 3e61ce1b96cdc43708322f2cd72f7a1a, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

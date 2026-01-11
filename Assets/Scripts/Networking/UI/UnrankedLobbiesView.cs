@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using SatelliteGameJam.Networking.Core;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
@@ -19,14 +20,26 @@ public class UnrankedLobbiesView : MonoBehaviour
 
     private void Start()
     {
+        DependencyHelper.RetryUntilSuccess(
+                this,
+                WaitForSteam,
+                "NetworkConnectionManager",
+                retryInterval: 1f,
+                maxAttempts: 20
+            );
+    }
+
+    private bool WaitForSteam()
+    {
         if (SteamManager.Instance == null || !SteamManager.Instance.ConnectedToSteam())
         {
             Debug.Log("Steam not initialized; cannot display lobbies.");
-            return;
+            return false;
         }
 
         // create repeating refresh every 30 seconds
         InvokeRepeating(nameof(RefreshList), 0f, 5f);
+        return true;
     }
 
     public async void RefreshList()
