@@ -6,6 +6,7 @@ using Steamworks.Data;
 using UnityEngine;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Identity;
+using SatelliteGameJam.Networking.Debugging;
 
 namespace SatelliteGameJam.Networking.Core
 {
@@ -97,6 +98,12 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     private void RoutePacket(SteamId sender, byte[] data)
     {
+        // Record packet for debug overlay
+        if (config != null && config.showPacketStatistics)
+        {
+            NetworkDebugOverlay.Instance?.RecordPacketReceived(data.Length);
+        }
+
         // Packet routing by parsing message type byte
         if (data.Length < 1)
         {
@@ -154,6 +161,12 @@ namespace SatelliteGameJam.Networking.Core
         }
 
         SteamNetworking.SendP2PPacket(targetId, data, data.Length, channel, sendType);
+
+        // Record packet for debug overlay
+        if (config != null && config.showPacketStatistics)
+        {
+            NetworkDebugOverlay.Instance?.RecordPacketSent(data.Length);
+        }
     }
 
     /// <summary>

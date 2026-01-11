@@ -90,11 +90,11 @@ namespace SatelliteGameJam.Networking.Core
         [Tooltip("Log detailed networking debug information")]
         public bool verboseLogging = false;
         
-        [Tooltip("Show network statistics overlay in builds")]
-        public bool showDebugOverlay = false;
+        [Tooltip("Show network debug overlay in game (toggle with Tab key)")]
+        public bool showNetworkDebugOverlay = true;
         
-        [Tooltip("Display packet send/receive counts")]
-        public bool trackPacketStatistics = true;
+        [Tooltip("Track and display packet send/receive statistics")]
+        public bool showPacketStatistics = true;
 
         [Header("Error Handling")]
         [Tooltip("Automatically attempt to reconnect on disconnection")]
