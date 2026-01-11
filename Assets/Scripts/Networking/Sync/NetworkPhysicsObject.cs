@@ -10,15 +10,16 @@ namespace SatelliteGameJam.Networking.Sync
     /// Synchronizes physics state for free-standing objects (soccer ball, etc.).
     /// Uses last-touch authority model - whoever last collided with the object becomes authoritative.
     /// Authority player simulates physics and broadcasts state; others interpolate/extrapolate.
+    /// Auto-adds NetworkIdentity if missing. Requires Rigidbody.
     /// </summary>
-    [RequireComponent(typeof(NetworkIdentity), typeof(Rigidbody))]
-    public class NetworkPhysicsObject : MonoBehaviour
+    [RequireComponent(typeof(Rigidbody))]
+    public class NetworkPhysicsObject : NetworkSyncBase
 {
+    [Header("Physics Sync Settings")]
     [SerializeField] private float sendRate = 10f; // Hz
     [SerializeField] private float authorityHandoffCooldown = 0.2f;
     [SerializeField] private bool editorRequestAuthority = false; // For testing in editor
 
-    private NetworkIdentity netIdentity;
     private Rigidbody rb;
     private SteamId currentAuthority;
     private float nextSendTime;
@@ -37,13 +38,35 @@ namespace SatelliteGameJam.Networking.Sync
         Debug.Log("Action performed!");
     }
 
-    private void Awake()
+    protected override void OnNetworkSetupComplete()
     {
-        netIdentity = GetComponent<NetworkIdentity>();
         rb = GetComponent<Rigidbody>();
+        
+        if (rb == null)
+        {
+            Debug.LogError($"[NetworkPhysicsObject] Rigidbody is required on {gameObject.name}");
+            enabled = false;
+            return;
+        }
 
-        // Register network message handlers
+        DependencyHelper.RetryUntilSuccess(
+            this,
+            TryRegisterHandlers,
+            "NetworkConnectionManager",
+            retryInterval: 0.1f,
+            maxAttempts: 10
+        );
+    }
+
+    private bool TryRegisterHandlers()
+    {
+        if (NetworkConnectionManager.Instance == null)
+        {
+            return false; // Retry
+        }
+
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PhysicsSync, OnReceivePhysicsSync);
+        return true; // Success
     }
 
     private void Start()
@@ -57,6 +80,8 @@ namespace SatelliteGameJam.Networking.Sync
 
     private void FixedUpdate()
     {
+        if (!isInitialized) return;
+
         if (editorRequestAuthority)
         {
             RequestAuthority(SteamManager.Instance.PlayerSteamId);
@@ -81,6 +106,8 @@ namespace SatelliteGameJam.Networking.Sync
 
     private void OnCollisionEnter(Collision collision)
     {
+        if (!isInitialized) return;
+
         // Request authority on player collision
         if (collision.gameObject.CompareTag("Player"))
         {
@@ -97,6 +124,7 @@ namespace SatelliteGameJam.Networking.Sync
     /// </summary>
     private bool IsAuthority()
     {
+        if (!isInitialized) return false;
         // Authority check
         return currentAuthority == SteamManager.Instance.PlayerSteamId;
     }

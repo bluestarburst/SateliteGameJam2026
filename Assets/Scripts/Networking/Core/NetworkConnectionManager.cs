@@ -14,10 +14,8 @@ namespace SatelliteGameJam.Networking.Core
     /// Routes packets by channel and message type to registered handlers.
     /// Does NOT track peers - queries SteamManager.Instance.currentLobby.Members for peer list.
     /// </summary>
-    public class NetworkConnectionManager : MonoBehaviour
+    public class NetworkConnectionManager : NetworkManagerBase<NetworkConnectionManager>
 {
-    public static NetworkConnectionManager Instance { get; private set; }
-
     // Handler registration - maps message types to handlers
     private Dictionary<NetworkMessageType, Action<SteamId, byte[]>> messageHandlers;
 
@@ -34,17 +32,8 @@ namespace SatelliteGameJam.Networking.Core
     private readonly Dictionary<SteamId, GameObject> spawnedRemotePlayers = new();
 
 
-    private void Awake()
+    protected override void OnAwakeAfterSingleton()
     {
-        // Singleton pattern
-        if (Instance != null && Instance != this)
-        {
-            Debug.LogWarning("Multiple instances of NetworkConnectionManager detected. Destroying duplicate.");
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
         messageHandlers = new Dictionary<NetworkMessageType, Action<SteamId, byte[]>>();
     }
 
@@ -63,6 +52,24 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     private void PollChannel(int channel)
     {
+        // Check if using mock Steam
+        if (MockSteamNetworking.Instance != null && MockSteamNetworking.Instance.IsEnabled)
+        {
+            // Use mock networking
+            while (MockSteamNetworking.Instance.IsP2PPacketAvailable(channel))
+            {
+                var mockPacket = MockSteamNetworking.Instance.ReadP2PPacket(channel);
+                if (mockPacket.HasValue)
+                {
+                    RoutePacket(mockPacket.Value.SteamId, mockPacket.Value.Data);
+                }
+            }
+            return;
+        }
+
+        // Use real Steam networking
+        if (!Steamworks.SteamClient.IsValid) return; // Steam not initialized
+
         // Packet polling and routing
         while (SteamNetworking.IsP2PPacketAvailable(channel))
         {
@@ -106,6 +113,14 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void SendToAll(byte[] data, int channel, P2PSend sendType)
     {
+        // Check if using mock Steam
+        if (MockSteamNetworking.Instance != null && MockSteamNetworking.Instance.IsEnabled)
+        {
+            // Mock mode - just store locally (would normally send to mock peers)
+            MockSteamNetworking.Instance.SendP2PPacket(default, data, channel);
+            return;
+        }
+
         // Send to all peers via SteamManager.Instance.currentLobby.Members
         if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.MemberCount == 0)
         {
@@ -126,6 +141,13 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void SendTo(SteamId targetId, byte[] data, int channel, P2PSend sendType)
     {
+        // Check if using mock Steam
+        if (MockSteamNetworking.Instance != null && MockSteamNetworking.Instance.IsEnabled)
+        {
+            MockSteamNetworking.Instance.SendP2PPacket(targetId, data, channel);
+            return;
+        }
+
         // Send to specific peer
         if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.MemberCount == 0)
         {

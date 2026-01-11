@@ -12,10 +12,8 @@ namespace SatelliteGameJam.Networking.State
     /// Provides events for player state changes (scene changes, role assignments, ready states).
     /// Does NOT duplicate SteamManager's peer list - queries it for current members.
     /// </summary>
-    public class PlayerStateManager : MonoBehaviour
+    public class PlayerStateManager : NetworkManagerBase<PlayerStateManager>
 {
-    public static PlayerStateManager Instance { get; private set; }
-
     // Per-player state cache
     private readonly Dictionary<SteamId, PlayerState> playerStates = new();
 
@@ -26,33 +24,29 @@ namespace SatelliteGameJam.Networking.State
     public event Action<SteamId> OnPlayerJoined;
     public event Action<SteamId> OnPlayerLeft;
 
-    private void Awake()
+    protected override void OnAwakeAfterSingleton()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
-
-        // Register message handlers
-        RepeatUntilRegistered();
+        // Register message handlers with dependency retry
+        DependencyHelper.RetryUntilSuccess(
+            this,
+            TryRegisterHandlers,
+            "NetworkConnectionManager",
+            retryInterval: 0.1f,
+            maxAttempts: 10
+        );
     }
 
-    private void RepeatUntilRegistered()
+    private bool TryRegisterHandlers()
     {
         if (NetworkConnectionManager.Instance == null)
         {
-            Debug.LogWarning("PlayerStateManager: NetworkConnectionManager not found. Retrying...");
-            Invoke(nameof(RepeatUntilRegistered), 0.5f);
-            return;
+            return false; // Retry
         }
 
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerReady, OnReceivePlayerReady);
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.RoleAssign, OnReceiveRoleAssign);
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerSceneState, OnReceivePlayerSceneState);
+        return true; // Success
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using Steamworks;
 using UnityEngine;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.State;
+using SatelliteGameJam.Networking.Core;
 
 namespace SatelliteGameJam.Networking.Voice
 {
@@ -14,10 +15,8 @@ namespace SatelliteGameJam.Networking.Voice
     /// - Ground Control: Only hear space when at console; always hear other ground players
     /// - Space Station: Always hear ground; hear other space players within radius
     /// </summary>
-    public class VoiceSessionManager : MonoBehaviour
+    public class VoiceSessionManager : NetworkManagerBase<VoiceSessionManager>
 {
-    public static VoiceSessionManager Instance { get; private set; }
-
     [Header("Voice Rules")]
     [SerializeField] private float spaceProximityRadius = 20f; // Distance for space-to-space voice
     [SerializeField] private bool enableDebugLogs = false;
@@ -33,30 +32,37 @@ namespace SatelliteGameJam.Networking.Voice
     // Local player state
     private bool isLocalPlayerAtConsole = false;
 
-    private void Awake()
+    protected override void OnAwakeAfterSingleton()
     {
-        if (Instance != null && Instance != this)
+        DependencyHelper.RetryUntilSuccess(
+            this,
+            TryRegisterHandlers,
+            "PlayerStateManager",
+            retryInterval: 0.1f,
+            maxAttempts: 10
+        );
+    }
+
+    private bool TryRegisterHandlers()
+    {
+        if (PlayerStateManager.Instance == null)
         {
-            Destroy(gameObject);
-            return;
+            return false; // Retry
         }
 
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
-
-        // Subscribe to player state events
-        if (PlayerStateManager.Instance != null)
-        {
-            PlayerStateManager.Instance.OnPlayerJoined += OnPlayerJoined;
-            PlayerStateManager.Instance.OnPlayerLeft += OnPlayerLeft;
-            PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
-        }
+        PlayerStateManager.Instance.OnPlayerJoined += OnPlayerJoined;
+        PlayerStateManager.Instance.OnPlayerLeft += OnPlayerLeft;
+        PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+        return true; // Success
     }
 
     private void Update()
     {
         // Apply voice gating rules every frame based on current state
-        ApplyVoiceGating();
+        if (PlayerStateManager.Instance != null)
+        {
+            ApplyVoiceGating();
+        }
     }
 
     // ===== Public API =====
@@ -161,7 +167,7 @@ namespace SatelliteGameJam.Networking.Voice
     /// </summary>
     private void ApplyVoiceGating()
     {
-        if (PlayerStateManager.Instance == null) return;
+        if (PlayerStateManager.Instance == null || SteamManager.Instance == null) return;
 
         SteamId localId = SteamManager.Instance.PlayerSteamId;
         PlayerState localState = PlayerStateManager.Instance.GetPlayerState(localId);

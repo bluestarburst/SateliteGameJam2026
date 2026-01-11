@@ -14,10 +14,8 @@ namespace SatelliteGameJam.Networking.State
     /// using PlayerSceneState messages. Each client loads its scene upon receiving its own assignment
     /// and sends an acknowledgement.
     /// </summary>
-    public class SceneSyncManager : MonoBehaviour
+    public class SceneSyncManager : NetworkManagerBase<SceneSyncManager>
     {
-        public static SceneSyncManager Instance { get; private set; }
-
         [Header("Scene Names")]
         [SerializeField] private string lobbySceneName = "Lobby";
         [SerializeField] private string groundControlSceneName = "GroundControl";
@@ -29,27 +27,23 @@ namespace SatelliteGameJam.Networking.State
 
         private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
 
-        private void Awake()
+        protected override void OnAwakeAfterSingleton()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-
-            RegisterHandlers();
+            DependencyHelper.RetryUntilSuccess(
+                this,
+                TryRegisterHandlers,
+                "NetworkConnectionManager",
+                retryInterval: 0.1f,
+                maxAttempts: 10
+            );
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
-        private void RegisterHandlers()
+        private bool TryRegisterHandlers()
         {
             if (NetworkConnectionManager.Instance == null)
             {
-                Debug.LogWarning("[SceneSync] NetworkConnectionManager not found. Retrying...");
-                Invoke(nameof(RegisterHandlers), 0.5f);
-                return;
+                return false; // Retry
             }
 
             NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
@@ -59,9 +53,11 @@ namespace SatelliteGameJam.Networking.State
             {
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
             }
+            
+            return true; // Success
         }
 
-        private void OnDestroy()
+        protected override void OnDestroyBeforeNull()
         {
             if (NetworkConnectionManager.Instance != null)
             {

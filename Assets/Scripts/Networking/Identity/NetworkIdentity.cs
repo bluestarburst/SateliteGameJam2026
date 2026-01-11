@@ -21,6 +21,8 @@ namespace SatelliteGameJam.Networking.Identity
     private void Awake()
     {
         // Registration and ID generation if needed
+        // For remote players, ID is set by NetworkConnectionManager before registration
+        // For scene objects, use the serialized ID or generate one
         if (networkId == 0)
         {
             networkId = GenerateNetworkId();
@@ -99,11 +101,17 @@ namespace SatelliteGameJam.Networking.Identity
     
     /// <summary>
     /// Generates a unique network ID (hash-based or scene index).
+    /// WARNING: This hash-based method is NOT suitable for dynamically spawned players!
+    /// For remote players, NetworkConnectionManager.SpawnRemotePlayerFor() explicitly
+    /// assigns the SteamId as the network ID via SetNetworkId().
+    /// This method only runs for scene objects with networkId == 0 at Awake.
     /// </summary>
     private uint GenerateNetworkId()
     {
         // ID generation
         // Hash of the object's name and position.
+        // This is deterministic for scene-placed objects but will collide for
+        // dynamically spawned objects at the same position with similar names.
         return (uint)(name.GetHashCode() ^ transform.position.GetHashCode());
     }
 }

@@ -10,16 +10,16 @@ namespace SatelliteGameJam.Networking.Sync
     /// Synchronizes transform (position, rotation, velocity) for owner-driven objects.
     /// Owner sends state at fixed rate, non-owners interpolate/extrapolate to received state.
     /// Suitable for player-held objects or owned game entities.
+    /// Auto-adds NetworkIdentity if missing.
     /// </summary>
-    [RequireComponent(typeof(NetworkIdentity))]
-    public class NetworkTransformSync : MonoBehaviour
+    public class NetworkTransformSync : NetworkSyncBase
 {
+    [Header("Sync Settings")]
     [SerializeField] private float sendRate = 10f;
     [SerializeField] private bool syncPosition = true;
     [SerializeField] private bool syncRotation = true;
     [SerializeField] private bool syncVelocity = false;
     
-    private NetworkIdentity netIdentity;
     private Rigidbody rb;
     private float nextSendTime;
     
@@ -30,17 +30,35 @@ namespace SatelliteGameJam.Networking.Sync
     private float lastReceiveTime;
     private bool hasReceivedState;
     
-    private void Awake()
+    protected override void OnNetworkSetupComplete()
     {
-        netIdentity = GetComponent<NetworkIdentity>();
         rb = GetComponent<Rigidbody>();
         
+        DependencyHelper.RetryUntilSuccess(
+            this,
+            TryRegisterHandlers,
+            "NetworkConnectionManager",
+            retryInterval: 0.1f,
+            maxAttempts: 10
+        );
+    }
+
+    private bool TryRegisterHandlers()
+    {
+        if (NetworkConnectionManager.Instance == null)
+        {
+            return false; // Retry
+        }
+
         NetworkConnectionManager.Instance.RegisterHandler(
             NetworkMessageType.TransformSync, OnReceiveTransformSync);
+        return true; // Success
     }
     
     private void Update()
     {
+        if (!isInitialized) return;
+
         if (IsOwner())
         {
             if (Time.time >= nextSendTime)
@@ -53,15 +71,6 @@ namespace SatelliteGameJam.Networking.Sync
         {
             InterpolateToTarget();
         }
-    }
-    
-    /// <summary>
-    /// Returns true if the local player owns this object.
-    /// </summary>
-    private bool IsOwner()
-    {
-        // Ownership check
-        return netIdentity.OwnerSteamId == SteamManager.Instance?.PlayerSteamId;
     }
     
     /// <summary>

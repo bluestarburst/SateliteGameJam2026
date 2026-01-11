@@ -1192,6 +1192,63 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: -6438634986701613546, guid: 1e2f6383eb10ee3458b9c53eac997493, type: 3}
+--- !u!1001 &1138361875
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -5.65851
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -3.12944
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 2.72922
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1411251398165649952, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2231938572761584968, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
+      propertyPath: m_Name
+      value: SteamPackSimple
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: c189daf2e8fb84a8997188b8496908f9, type: 3}
 --- !u!1 &1158191229
 GameObject:
   m_ObjectHideFlags: 0
@@ -1344,9 +1401,11 @@ GameObject:
   - component: {fileID: 1376053527}
   - component: {fileID: 1376053525}
   - component: {fileID: 1376053531}
+  - component: {fileID: 1376053533}
+  - component: {fileID: 1376053532}
   m_Layer: 0
   m_Name: Player
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -1476,6 +1535,36 @@ MonoBehaviour:
   moveAction: {fileID: 153536661}
   jumpAction: {fileID: 573260497}
   groundCount: 0
+--- !u!114 &1376053532
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1376053524}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 292aaaea0ae7b4467b0f2b306c171906, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Sync.NetworkTransformSync
+  autoAddNetworkIdentity: 1
+  sendRate: 10
+  syncPosition: 1
+  syncRotation: 1
+  syncVelocity: 1
+--- !u!114 &1376053533
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1376053524}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 195a96f8ceb994cee9bfb442e1ec44ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Identity.NetworkIdentity
+  networkId: 0
 --- !u!1 &1496670336
 GameObject:
   m_ObjectHideFlags: 0
@@ -1924,3 +2013,4 @@ SceneRoots:
   - {fileID: 1680895244}
   - {fileID: 780980982}
   - {fileID: 935071473}
+  - {fileID: 1138361875}
