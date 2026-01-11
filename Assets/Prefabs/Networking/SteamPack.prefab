@@ -46,8 +46,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.NetworkSetup
   useMockSteam: 0
-  remotePlayerPrefab: {fileID: 0}
-  autoSpawnPlayers: 1
+  remotePlayerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
+  autoSpawnPlayers: 0
   lobbySceneName: Lobby
   groundControlSceneName: BaseStation
   spaceStationSceneName: Satellite

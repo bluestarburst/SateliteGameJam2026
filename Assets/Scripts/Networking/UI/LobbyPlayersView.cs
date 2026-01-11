@@ -41,11 +41,26 @@ public class LobbyPlayersView : MonoBehaviour
         if (autoRefreshOnEnable) RefreshList();
 
         // Listen to player state changes to update the list when players change scenes or roles
-        PlayerStateManager.Instance.OnRoleChanged += OnPlayerRoleChanged;
+        if (PlayerStateManager.Instance != null)
+        {
+            PlayerStateManager.Instance.OnRoleChanged += OnPlayerRoleChanged;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        // Unsubscribe when destroyed to prevent callbacks on destroyed object
+        if (PlayerStateManager.Instance != null)
+        {
+            PlayerStateManager.Instance.OnRoleChanged -= OnPlayerRoleChanged;
+        }
     }
 
     private void OnPlayerRoleChanged(SteamId steamId, PlayerRole newRole)
     {
+        // Don't process if this component has been destroyed
+        if (this == null) return;
+
         // Update the player's item color based on their new role
         SetPlayerItemColor(steamId, newRole == PlayerRole.SpaceStation ? new UnityEngine.Color(0.5f, 0.8f, 1f) : new UnityEngine.Color(0.8f, 0.5f, 0.5f));
 
@@ -200,6 +215,13 @@ public class LobbyPlayersView : MonoBehaviour
     {
         if (playerItems.TryGetValue(steamId, out var item))
         {
+            // Check if the GameObject still exists
+            if (item == null)
+            {
+                playerItems.Remove(steamId);
+                return;
+            }
+
             var text = item.GetComponent<TMP_Text>();
             if (text != null)
             {
