@@ -21,17 +21,22 @@ namespace SatelliteGameJam.Networking.Core
     // Handler registration - maps message types to handlers
     private Dictionary<NetworkMessageType, Action<SteamId, byte[]>> messageHandlers;
 
-    // include info about channels to poll for incoming packets
-    [Header("Channels to Poll")]
-    [SerializeField] private int[] channelsToPoll = new[] { 0, 1, 3, 4 }; // Exclude voice channel 2
+    [Header("Configuration")]
+    [SerializeField] private NetworkingConfiguration config;
 
-    // Player asset to create for new connections (optional)
-    [Header("Player Prefab")]
+    // Fallback settings if no config is assigned
+    [Header("Fallback Settings (used if no config assigned)")]
+    [SerializeField] private int[] channelsToPoll = new[] { 0, 1, 3, 4 }; // Exclude voice channel 2
     [SerializeField] private bool autoSpawnPlayer = true;
     [SerializeField] private GameObject playerPrefab;
 
     // Track spawned remote player instances to prevent duplicates and allow cleanup
     private readonly Dictionary<SteamId, GameObject> spawnedRemotePlayers = new();
+
+    // Properties for accessing configuration
+    private int[] ChannelsToPoll => config != null ? config.channelsToPoll : channelsToPoll;
+    private bool AutoSpawnPlayer => config != null ? config.autoSpawnPlayers : autoSpawnPlayer;
+    private GameObject PlayerPrefab => config != null ? config.remotePlayerPrefab : playerPrefab;
 
 
     private void Awake()
@@ -46,12 +51,22 @@ namespace SatelliteGameJam.Networking.Core
         Instance = this;
         DontDestroyOnLoad(gameObject);
         messageHandlers = new Dictionary<NetworkMessageType, Action<SteamId, byte[]>>();
+
+        // Validate configuration
+        if (config != null)
+        {
+            config.ValidateConfiguration();
+        }
+        else
+        {
+            Debug.LogWarning("[NetworkConnectionManager] No NetworkingConfiguration assigned. Using fallback settings.");
+        }
     }
 
     private void Update()
     {
-        // Poll channels 0, 1, 3 (voice channel 2 is handled by VoiceChatP2P)
-        foreach (int channel in channelsToPoll)
+        // Poll channels from configuration
+        foreach (int channel in ChannelsToPoll)
         {
             if (channel == 2) continue; // Skip voice channel
             PollChannel(channel);
@@ -178,17 +193,17 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void SpawnRemotePlayerFor(SteamId steamId, string displayName = null)
     {
-        if (!autoSpawnPlayer) return;
-        if (playerPrefab == null)
+        if (!AutoSpawnPlayer) return;
+        if (PlayerPrefab == null)
         {
-            Debug.LogWarning("NetworkConnectionManager has no playerPrefab assigned; cannot auto-spawn remote players.");
+            Debug.LogWarning("[NetworkConnectionManager] No playerPrefab assigned; cannot auto-spawn remote players.");
             return;
         }
 
         if (steamId == SteamManager.Instance?.PlayerSteamId) return;
         if (spawnedRemotePlayers.ContainsKey(steamId)) return;
 
-        var instance = Instantiate(playerPrefab);
+        var instance = Instantiate(PlayerPrefab);
 
         DontDestroyOnLoad(instance);
 
@@ -204,6 +219,11 @@ namespace SatelliteGameJam.Networking.Core
         }
 
         spawnedRemotePlayers[steamId] = instance;
+        
+        if (config != null && config.verboseLogging)
+        {
+            Debug.Log($"[NetworkConnectionManager] Spawned remote player for {displayName ?? steamId.ToString()}");
+        }
     }
 
     /// <summary>

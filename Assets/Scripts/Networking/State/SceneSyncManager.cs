@@ -18,7 +18,10 @@ namespace SatelliteGameJam.Networking.State
     {
         public static SceneSyncManager Instance { get; private set; }
 
-        [Header("Scene Names")]
+        [Header("Configuration")]
+        [SerializeField] private NetworkingConfiguration config;
+
+        [Header("Fallback Scene Names (if no config assigned)")]
         [SerializeField] private string lobbySceneName = "Lobby";
         [SerializeField] private string groundControlSceneName = "GroundControl";
         [SerializeField] private string spaceStationSceneName = "SpaceStation";
@@ -28,6 +31,12 @@ namespace SatelliteGameJam.Networking.State
         [SerializeField] private bool logDebug = true;
 
         private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
+
+        // Properties for accessing configuration
+        private string LobbySceneName => config != null ? config.lobbySceneName : lobbySceneName;
+        private string GroundControlSceneName => config != null ? config.groundControlSceneName : groundControlSceneName;
+        private string SpaceStationSceneName => config != null ? config.spaceStationSceneName : spaceStationSceneName;
+        private float SceneChangeTimeout => config != null ? config.sceneChangeTimeoutSeconds : sceneChangeTimeoutSeconds;
 
         private void Awake()
         {
@@ -168,7 +177,7 @@ namespace SatelliteGameJam.Networking.State
             
             if (pendingAcks.Count > 0)
             {
-                Invoke(nameof(CheckAckTimeout), sceneChangeTimeoutSeconds);
+                Invoke(nameof(CheckAckTimeout), SceneChangeTimeout);
             }
         }
 
@@ -215,9 +224,9 @@ namespace SatelliteGameJam.Networking.State
         {
             switch (sceneId)
             {
-                case NetworkSceneId.Lobby: return lobbySceneName;
-                case NetworkSceneId.GroundControl: return groundControlSceneName;
-                case NetworkSceneId.SpaceStation: return spaceStationSceneName;
+                case NetworkSceneId.Lobby: return LobbySceneName;
+                case NetworkSceneId.GroundControl: return GroundControlSceneName;
+                case NetworkSceneId.SpaceStation: return SpaceStationSceneName;
                 default: return string.Empty;
             }
         }
