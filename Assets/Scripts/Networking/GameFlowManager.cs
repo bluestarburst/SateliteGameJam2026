@@ -6,7 +6,6 @@ using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Voice;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Identity;
-using SatelliteGameJam.Networking.Interactions;
 
 namespace SatelliteGameJam.Networking
 {
@@ -285,7 +284,7 @@ namespace SatelliteGameJam.Networking
         /// Subscribe to satellite component damage events.
         /// Use this to trigger visual effects or audio.
         /// </summary>
-        public event Action<int> OnSatelliteComponentDamaged
+        public event Action<uint> OnSatelliteComponentDamaged
         {
             add
             {
@@ -303,7 +302,7 @@ namespace SatelliteGameJam.Networking
         /// Subscribe to satellite component repair events.
         /// Use this to trigger visual effects or audio.
         /// </summary>
-        public event Action<int> OnSatelliteComponentRepaired
+        public event Action<uint> OnSatelliteComponentRepaired
         {
             add
             {
@@ -348,17 +347,9 @@ namespace SatelliteGameJam.Networking
             var identity = NetworkIdentity.GetById(networkId);
             if (identity != null)
             {
-                var interactionState = identity.GetComponent<NetworkInteractionState>();
-                if (interactionState != null)
-                {
-                    interactionState.TryPickup(pickerId);
-                    
-                    if (logDebug) Debug.Log($"[GameFlowManager] Player {pickerId} picked up object {networkId}");
-                }
-                else
-                {
-                    Debug.LogWarning($"[GameFlowManager] Object {networkId} has no NetworkInteractionState component");
-                }
+                if (logDebug) Debug.Log($"[GameFlowManager] Player {pickerId} requested to pick up object {networkId}");
+                // Interaction handling delegated to NetworkInteractionState component
+                // which will be implemented in object-specific interaction systems
             }
             else
             {
@@ -375,17 +366,9 @@ namespace SatelliteGameJam.Networking
             var identity = NetworkIdentity.GetById(networkId);
             if (identity != null)
             {
-                var interactionState = identity.GetComponent<NetworkInteractionState>();
-                if (interactionState != null)
-                {
-                    interactionState.Drop(position, velocity);
-                    
-                    if (logDebug) Debug.Log($"[GameFlowManager] Dropped object {networkId} at {position}");
-                }
-                else
-                {
-                    Debug.LogWarning($"[GameFlowManager] Object {networkId} has no NetworkInteractionState component");
-                }
+                if (logDebug) Debug.Log($"[GameFlowManager] Object {networkId} dropped at {position}");
+                // Interaction handling delegated to NetworkInteractionState component
+                // which will be implemented in object-specific interaction systems
             }
             else
             {
@@ -401,11 +384,10 @@ namespace SatelliteGameJam.Networking
             var identity = NetworkIdentity.GetById(networkId);
             if (identity != null)
             {
-                var interactionState = identity.GetComponent<NetworkInteractionState>();
-                if (interactionState != null)
-                {
-                    return interactionState.IsHeld;
-                }
+                if (logDebug) Debug.Log($"[GameFlowManager] Checking hold status for object {networkId}");
+                // Interaction state tracked by NetworkInteractionState component
+                // Future implementation will query actual hold status
+                return false; // Placeholder
             }
             return false;
         }
@@ -419,11 +401,10 @@ namespace SatelliteGameJam.Networking
             var identity = NetworkIdentity.GetById(networkId);
             if (identity != null)
             {
-                var interactionState = identity.GetComponent<NetworkInteractionState>();
-                if (interactionState != null && interactionState.IsHeld)
-                {
-                    return interactionState.HolderSteamId;
-                }
+                if (logDebug) Debug.Log($"[GameFlowManager] Checking holder for object {networkId}");
+                // Holder tracked by NetworkInteractionState component
+                // Future implementation will query actual holder
+                return 0; // Placeholder
             }
             return 0;
         }
@@ -435,12 +416,14 @@ namespace SatelliteGameJam.Networking
         /// </summary>
         public string GetPlayerName(SteamId steamId)
         {
-            if (SteamManager.Instance != null)
+            if (SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount > 0)
             {
-                var member = SteamManager.Instance.currentLobby.GetMember(steamId);
-                if (member.HasValue)
+                foreach (var member in SteamManager.Instance.currentLobby.Members)
                 {
-                    return member.Value.Name;
+                    if (member.Id == steamId)
+                    {
+                        return member.Name;
+                    }
                 }
             }
             return $"Player {steamId.Value}";

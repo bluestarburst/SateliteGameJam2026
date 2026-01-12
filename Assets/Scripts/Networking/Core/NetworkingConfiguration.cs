@@ -1,5 +1,5 @@
 using UnityEngine;
-using Steamworks.Data;
+using Steamworks;
 using System.Collections.Generic;
 using System.Linq;
 using SatelliteGameJam.Networking.Core.Abstractions;
@@ -125,6 +125,25 @@ namespace SatelliteGameJam.Networking.Core
         
         [Tooltip("Transport layer to use (Steam P2P, Mock, etc.) - future enhancement")]
         public string transportLayerType = "SteamP2PTransport";
+
+        // Singleton instance
+        private static NetworkingConfiguration instance;
+        public static NetworkingConfiguration Instance
+        {
+            get
+            {
+                if (instance == null)
+                {
+                    instance = Resources.Load<NetworkingConfiguration>("NetworkingConfig");
+                    if (instance == null)
+                    {
+                        Debug.LogWarning("[NetworkingConfiguration] NetworkingConfig not found in Resources/NetworkingConfig.asset. " +
+                            "Create one via: Right-click → Create → Networking → Configuration");
+                    }
+                }
+                return instance;
+            }
+        }
 
         // Helper methods for code access
         
