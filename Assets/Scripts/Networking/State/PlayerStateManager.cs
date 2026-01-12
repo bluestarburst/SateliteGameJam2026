@@ -38,12 +38,21 @@ namespace SatelliteGameJam.Networking.State
         DontDestroyOnLoad(gameObject);
 
         // Register message handlers
-        if (NetworkConnectionManager.Instance != null)
+        RepeatUntilRegistered();
+    }
+
+    private void RepeatUntilRegistered()
+    {
+        if (NetworkConnectionManager.Instance == null)
         {
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerReady, OnReceivePlayerReady);
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.RoleAssign, OnReceiveRoleAssign);
-            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerSceneState, OnReceivePlayerSceneState);
+            Debug.LogWarning("PlayerStateManager: NetworkConnectionManager not found. Retrying...");
+            Invoke(nameof(RepeatUntilRegistered), 0.5f);
+            return;
         }
+
+        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerReady, OnReceivePlayerReady);
+        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.RoleAssign, OnReceiveRoleAssign);
+        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerSceneState, OnReceivePlayerSceneState);
     }
 
     /// <summary>
@@ -175,7 +184,7 @@ namespace SatelliteGameJam.Networking.State
 
     private void BroadcastPlayerSceneState(SteamId steamId, NetworkSceneId sceneId, PlayerRole role)
     {
-        byte[] packet = new byte[15];
+           byte[] packet = new byte[16]; // Type(1) + SteamId(8) + SceneId(2) + Role(1) + Timestamp(4)
         packet[0] = (byte)NetworkMessageType.PlayerSceneState;
         int offset = 1;
         NetworkSerialization.WriteULong(packet, ref offset, steamId);
@@ -213,7 +222,7 @@ namespace SatelliteGameJam.Networking.State
 
     private void OnReceivePlayerSceneState(SteamId sender, byte[] data)
     {
-        if (data.Length < 15) return;
+           if (data.Length < 16) return;
         
         int offset = 1;
         SteamId playerId = NetworkSerialization.ReadULong(data, ref offset);

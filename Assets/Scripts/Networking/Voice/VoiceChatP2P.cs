@@ -28,7 +28,6 @@ namespace SatelliteGameJam.Networking.Voice
     public bool isTalking => SteamUser.HasVoiceData;
     public bool isRecording => SteamUser.VoiceRecord;
     public bool isSending = false;
-    public bool pressingButton = false;
 
     private bool isLocalPlayerActive => SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount > 1;
 
@@ -37,15 +36,20 @@ namespace SatelliteGameJam.Networking.Voice
         voiceStream = new MemoryStream();
     }
 
+    private float shouldReset = 0f;
     private void Update()
     {
+        if (Time.time >= shouldReset)
+        {
+            isSending = false;
+            shouldReset = float.MaxValue;
+        }
         // Recording: capture voice and send via P2P
         if (isLocalPlayerActive)
         {
             // remove legacy getKey
             bool shouldRecord = alwaysRecord || Keyboard.current[pushToTalkAction].isPressed;
             SteamUser.VoiceRecord = shouldRecord;
-            pressingButton = Keyboard.current[pushToTalkAction].isPressed;
 
             if (SteamUser.HasVoiceData)
             {
@@ -60,11 +64,8 @@ namespace SatelliteGameJam.Networking.Voice
                     // Send compressed voice via P2P on dedicated voice channel
                     SendVoicePacket(compressedData, compressedRead);
                     isSending = true;
+                    shouldReset = Time.time + 0.5f; // Reset sending state after 1 second of no voice
                 }
-            }
-            else
-            {
-                isSending = false;
             }
         }
 

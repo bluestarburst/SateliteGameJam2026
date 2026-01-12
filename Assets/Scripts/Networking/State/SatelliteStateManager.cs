@@ -82,7 +82,7 @@ namespace SatelliteGameJam.Networking.State
         var members = SteamManager.Instance.currentLobby.Members;
         if (members.Count() == 0) return false;
 
-        SteamId lowestId = members.Min(m => m.Id);
+        SteamId lowestId = members.Min(m => m.Id.Value);
         return lowestId == SteamManager.Instance.PlayerSteamId;
     }
 
