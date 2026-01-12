@@ -1,21 +1,21 @@
 
 ### Voice Chat
-- [ ] Lobby scene
-    - [ ] Voice chat AUTOMATICALLY enabled for all lobby members (no PTT, always on)
-    - [ ] Do NOT spawn remote player prefabs in lobby
-    - [ ] Use lightweight voice proxies (AudioSource only) for voice playback
+- [x] Lobby scene
+    - [x] Voice chat AUTOMATICALLY enabled for all lobby members (no PTT, always on)
+    - [x] Do NOT spawn remote player prefabs in lobby
+    - [x] Use lightweight voice proxies (AudioSource only) for voice playback
 
-- [ ] Ground Control
-  - [ ] Ground control player AUTOMATICALLY sends voice to other Ground Control players (always on, no PTT)
-  - [ ] Ground control player sends voice to ALL Space Station players ONLY when tethered to transmission console
-  - [ ] Ground control player can only hear Space Station players when at transmission console
-  - [ ] Ground control player can always hear other Ground Control players
+- [x] Ground Control
+  - [x] Ground control player AUTOMATICALLY sends voice to other Ground Control players (always on, no PTT)
+  - [x] Ground control player sends voice to ALL Space Station players ONLY when tethered to transmission console
+  - [x] Ground control player can only hear Space Station players when at transmission console
+  - [x] Ground control player can always hear other Ground Control players
 
-- [ ] Space Scene
-  - [ ] Space player AUTOMATICALLY sends voice to nearby Space Station players (proximity-based, always on)
-  - [ ] Space player sends voice to Ground Control ONLY when pressing 'B' (push-to-talk)
-  - [ ] Space player can always hear Ground Control player
-  - [ ] Space player can hear other Space Station players within a certain radius
+- [x] Space Scene
+  - [x] Space player AUTOMATICALLY sends voice to nearby Space Station players (proximity-based, always on)
+  - [x] Space player sends voice to Ground Control ONLY when pressing 'B' (push-to-talk)
+  - [x] Space player can always hear Ground Control player
+  - [x] Space player can hear other Space Station players within a certain radius
 
 
 ### Satellite Status Sync

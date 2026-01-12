@@ -91,6 +91,17 @@ Central packet router. Responsibilities:
 - Manages remote player prefab spawning/despawning
 - Provides `SendTo()` and `SendToAll()` APIs
 
+### NetworkSyncManager
+**Location:** `Assets/Scripts/Networking/Sync/NetworkSyncManager.cs`
+
+Centralized sync component dispatcher. Responsibilities:
+- Registers sync message handlers ONCE (TransformSync, PhysicsSync, Interaction messages)
+- Routes packets to correct sync components using NetworkIdentity lookup
+- Prevents duplicate handler registrations from multiple component instances
+- Eliminates need for individual components to register/unregister handlers
+
+**Why it exists:** Without this, each NetworkTransformSync/NetworkPhysicsObject would register the same global handler in Awake(), causing multiple invocations per packet and handlers lingering after object destruction. NetworkSyncManager uses a centralized dispatch pattern - one manager receives all sync packets and forwards them to the appropriate component based on NetworkId.
+
 ### PlayerStateManager
 **Location:** `Assets/Scripts/Networking/State/PlayerStateManager.cs`
 
@@ -128,6 +139,8 @@ Voice recording and transmission. Responsibilities:
 
 ## Sync Components
 
+**Note:** All sync components use a centralized handler pattern via NetworkSyncManager. Components no longer register their own packet handlers - NetworkSyncManager receives all sync packets and dispatches them to the appropriate component instance using NetworkIdentity lookup.
+
 ### NetworkTransformSync
 **Location:** `Assets/Scripts/Networking/Sync/NetworkTransformSync.cs`
 
@@ -135,6 +148,7 @@ For owner-driven objects (player avatars). Features:
 - Owner sends at configurable rate (default 10 Hz)
 - Non-owners interpolate with velocity extrapolation
 - Requires `NetworkIdentity` component
+- Receives packets via `HandleTransformSync()` called by NetworkSyncManager
 
 ### NetworkPhysicsObject
 **Location:** `Assets/Scripts/Networking/Sync/NetworkPhysicsObject.cs`
@@ -143,6 +157,7 @@ For physics objects (tools, balls). Features:
 - Last-touch authority (whoever touched it last controls it)
 - Sends position, rotation, linear velocity, angular velocity
 - Higher sync rate (default 20 Hz) for responsive physics
+- Receives packets via `HandlePhysicsSync()` called by NetworkSyncManager
 
 ### NetworkInteractionState
 **Location:** `Assets/Scripts/Networking/Sync/NetworkInteractionState.cs`
@@ -151,6 +166,7 @@ For interactable objects. Features:
 - Pickup/drop/use events (not continuous sync)
 - Ownership tracking
 - Reliable delivery on channel 3
+- Receives packets via `HandlePickup()`, `HandleDrop()`, `HandleUse()` called by NetworkSyncManager
 
 ## Scene Managers
 
@@ -258,6 +274,7 @@ Assets/Scripts/Networking/
 │   ├── SatelliteStateManager.cs      # Satellite game state
 │   └── SceneSyncManager.cs           # Scene transitions
 ├── Sync/
+│   ├── NetworkSyncManager.cs         # Centralized sync dispatcher
 │   ├── NetworkTransformSync.cs       # Transform sync
 │   ├── NetworkPhysicsObject.cs       # Physics sync
 │   └── NetworkInteractionState.cs    # Interaction events

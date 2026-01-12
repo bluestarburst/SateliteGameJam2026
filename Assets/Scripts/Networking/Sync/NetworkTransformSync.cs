@@ -34,9 +34,7 @@ namespace SatelliteGameJam.Networking.Sync
     {
         netIdentity = GetComponent<NetworkIdentity>();
         rb = GetComponent<Rigidbody>();
-        
-        NetworkConnectionManager.Instance.RegisterHandler(
-            NetworkMessageType.TransformSync, OnReceiveTransformSync);
+        // Handler registration moved to NetworkSyncManager (centralized)
     }
     
     private void Update()
@@ -86,10 +84,12 @@ namespace SatelliteGameJam.Networking.Sync
     
     /// <summary>
     /// Handles incoming transform sync packets.
+    /// Called by NetworkSyncManager after dispatching by NetworkId.
     /// </summary>
-    private void OnReceiveTransformSync(SteamId sender, byte[] data)
+    public void HandleTransformSync(SteamId sender, byte[] data)
     {
         // Packet deserialization and state update
+        // NetworkSyncManager already validated NetworkId and dispatched to us
         const int expectedLength = 53;
         if (data == null || data.Length < expectedLength)
         {
@@ -97,13 +97,12 @@ namespace SatelliteGameJam.Networking.Sync
             return;
         }
 
-        int offset = 1;
-        uint netId = NetworkSerialization.ReadUInt(data, ref offset);
-        if (netId != netIdentity.NetworkId) return;
+        // Skip past message type (1) and NetworkId (4) - already read by NetworkSyncManager
+        int offset = 5;
 
         SteamId ownerSteamId = NetworkSerialization.ReadULong(data, ref offset);
         netIdentity.SetOwner(ownerSteamId);
-        
+
         if (!IsOwner())
         {
             targetPosition = NetworkSerialization.ReadVector3(data, ref offset);

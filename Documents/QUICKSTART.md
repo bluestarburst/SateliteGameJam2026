@@ -157,6 +157,7 @@ NetworkConnectionManager.Instance.SendMessageToAll(msg);
 |-----------|--------|---------|
 | `SteamManager.Instance` | Lobby, Steam ID | `SteamManager.Instance.PlayerSteamId` |
 | `NetworkConnectionManager.Instance` | Send/receive packets | `SendToAll()`, `RegisterHandler()` |
+| `NetworkSyncManager.Instance` | Sync dispatcher | Handles centralized sync message routing |
 | `PlayerStateManager.Instance` | Player state | `GetPlayerState()`, `SetLocalPlayerRole()` |
 | `SatelliteStateManager.Instance` | Satellite state | `GetHealth()`, `SetComponentDamaged()` |
 | `VoiceSessionManager.Instance` | Voice routing | `SetLocalPlayerAtConsole()` |
@@ -167,7 +168,7 @@ NetworkConnectionManager.Instance.SendMessageToAll(msg);
 ## Scene Setup Checklist
 
 ### Any Networked Scene
-- [ ] `SteamPack` prefab in scene (contains all managers)
+- [ ] `SteamPack` prefab in scene (contains all managers including NetworkSyncManager)
 
 ### Lobby Scene
 - [ ] `LobbyNetworkingManager` component on a GameObject

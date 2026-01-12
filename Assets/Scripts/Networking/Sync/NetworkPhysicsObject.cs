@@ -41,9 +41,7 @@ namespace SatelliteGameJam.Networking.Sync
     {
         netIdentity = GetComponent<NetworkIdentity>();
         rb = GetComponent<Rigidbody>();
-
-        // Register network message handlers
-        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PhysicsSync, OnReceivePhysicsSync);
+        // Handler registration moved to NetworkSyncManager (centralized)
     }
 
     private void Start()
@@ -137,10 +135,12 @@ namespace SatelliteGameJam.Networking.Sync
 
     /// <summary>
     /// Handles incoming physics sync packets.
+    /// Called by NetworkSyncManager after dispatching by NetworkId.
     /// </summary>
-    private void OnReceivePhysicsSync(SteamId sender, byte[] data)
+    public void HandlePhysicsSync(SteamId sender, byte[] data)
     {
         // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(16)][Vel(12)][AngVel(12)]
+        // NetworkSyncManager already validated NetworkId and dispatched to us
         const int expectedLength = 65;
         if (data == null || data.Length < expectedLength)
         {
@@ -148,14 +148,12 @@ namespace SatelliteGameJam.Networking.Sync
             return;
         }
 
-        int offset = 1;
-        uint netId = NetworkSerialization.ReadUInt(data, ref offset);
-        
-        if (netId != netIdentity.NetworkId) return;
-        
+        // Skip past message type (1) and NetworkId (4) - already read by NetworkSyncManager
+        int offset = 5;
+
         SteamId authSteamId = NetworkSerialization.ReadULong(data, ref offset);
         currentAuthority = authSteamId;
-        
+
         if (!IsAuthority())
         {
             targetPosition = NetworkSerialization.ReadVector3(data, ref offset);

@@ -9,23 +9,23 @@
 #### Lobby Scene
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| Voice auto-enabled for all (no PTT) | NOT IMPLEMENTED | Currently uses PTT |
-| No remote player prefabs | NOT IMPLEMENTED | Currently spawns full prefabs |
-| Use voice proxies only | PARTIAL | `VoiceSessionManager` supports proxies but `LobbyNetworkingManager` spawns prefabs |
+| Voice auto-enabled for all (no PTT) | IMPLEMENTED | `VoiceChatP2P.ShouldRecordVoice()` returns true for Lobby |
+| No remote player prefabs | IMPLEMENTED | `LobbyNetworkingManager` creates voice proxies only |
+| Use voice proxies only | IMPLEMENTED | `VoiceSessionManager.GetOrCreateVoiceRemotePlayer()` |
 
 #### Ground Control
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| Auto-send voice to other Ground Control players (always on) | NOT IMPLEMENTED | Currently uses PTT for all |
-| Send voice to ALL Space players ONLY when at console | NOT IMPLEMENTED | Currently sends to all peers always |
+| Auto-send voice to other Ground Control players (always on) | IMPLEMENTED | `VoiceChatP2P.ShouldSendVoiceTo()` always true for Ground→Ground |
+| Send voice to ALL Space players ONLY when at console | IMPLEMENTED | `VoiceChatP2P.ShouldSendVoiceTo()` checks `IsLocalPlayerAtConsole` |
 | Only hears Space players when at transmission console | IMPLEMENTED | `VoiceSessionManager.ShouldHearPlayer()` checks `isLocalPlayerAtConsole` |
 | Always hears other Ground Control players | IMPLEMENTED | Role check in `ShouldHearPlayer()` |
 
 #### Space Scene
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| Auto-send voice to nearby Space players (proximity, always on) | NOT IMPLEMENTED | Currently uses PTT for all |
-| Send voice to Ground Control ONLY when pressing 'B' (PTT) | NOT IMPLEMENTED | Currently sends to all peers |
+| Auto-send voice to nearby Space players (proximity, always on) | IMPLEMENTED | `VoiceChatP2P.ShouldSendVoiceTo()` checks `IsWithinProximityForSending()` |
+| Send voice to Ground Control ONLY when pressing 'B' (PTT) | IMPLEMENTED | `VoiceChatP2P.ShouldSendVoiceTo()` checks `crossRolePTTKey` |
 | Always hears Ground Control player | IMPLEMENTED | Role check in `ShouldHearPlayer()` |
 | Hears other Space players within radius | IMPLEMENTED | `IsWithinProximity()` check |
 
@@ -206,91 +206,57 @@ private void SpawnRemotePlayer(SteamId steamId, string displayName)
 
 Also remove the `RegisterRemotePlayerAvatar` call since we're not spawning avatars.
 
-### 3. Handler Registration Issues
+### 3. Handler Registration Issues ✅ RESOLVED
 
-**Problem:** `NetworkTransformSync` and `NetworkPhysicsObject` register global handlers in `Awake()`. If multiple objects exist, each registers the same handler, causing:
+**Problem:** `NetworkTransformSync` and `NetworkPhysicsObject` were registering global handlers in `Awake()`. If multiple objects existed, each registered the same handler, causing:
 - Multiple handler invocations per packet
 - Handlers remaining registered after object destroyed
 
-**Current Code (NetworkTransformSync.cs:38-39):**
+**Solution Implemented:**
+Created `NetworkSyncManager` (see `Assets/Scripts/Networking/Sync/NetworkSyncManager.cs`) which:
+
+1. **Registers handlers once** in its own Awake():
+   - TransformSync → `OnReceiveTransformSync()`
+   - PhysicsSync → `OnReceivePhysicsSync()`
+   - InteractionPickup/Drop/Use → `OnReceiveInteraction*()`
+
+2. **Dispatches to components** via NetworkIdentity lookup:
 ```csharp
-private void Awake()
+private void OnReceiveTransformSync(SteamId sender, byte[] data)
 {
-    NetworkConnectionManager.Instance.RegisterHandler(
-        NetworkMessageType.TransformSync, OnReceiveTransformSync);
-}
-```
-
-**Recommended Fix:**
-Option A: Register once globally, dispatch to objects via NetworkIdentity lookup
-```csharp
-// In a central TransformSyncManager (new component)
-public class TransformSyncManager : MonoBehaviour
-{
-    public static TransformSyncManager Instance { get; private set; }
-
-    private void Awake()
+    int offset = 1;
+    uint netId = NetworkSerialization.ReadUInt(data, ref offset);
+    
+    var identity = NetworkIdentity.GetById(netId);
+    if (identity != null)
     {
-        Instance = this;
-        NetworkConnectionManager.Instance.RegisterHandler(
-            NetworkMessageType.TransformSync, OnReceiveTransformSync);
-    }
-
-    private void OnReceiveTransformSync(SteamId sender, byte[] data)
-    {
-        uint netId = NetworkSerialization.ReadUInt(data, ref offset);
-        var identity = NetworkIdentity.GetById(netId);
-        if (identity != null)
-        {
-            identity.GetComponent<NetworkTransformSync>()?.HandleSync(data);
-        }
+        identity.GetComponent<NetworkTransformSync>()?.HandleTransformSync(sender, data);
     }
 }
 ```
 
-Option B: Register/unregister in OnEnable/OnDisable and check NetworkId before processing
+3. **Individual components** no longer register handlers - they only implement `Handle*()` methods that are called by NetworkSyncManager
 
-### 3. No Late-Join Synchronization
+This eliminates duplicate registrations and ensures clean handler lifecycle management.
 
-**Problem:** Players joining mid-game don't receive current state snapshot.
+### 4. No Late-Join Synchronization ✅ COMPLETED
+
+**Problem:** Players joining mid-game didn't receive current state snapshot.
 
 **Impact:**
-- New players don't see correct satellite health
-- New players don't see existing players' positions until next update
+- New players didn't see correct satellite health
+- New players didn't see existing players' positions until next update
 - Component damage states missing
 
-**Recommended Fix:**
-Add state snapshot request/response:
-```csharp
-// When player joins, request full state
-public void RequestStateSnapshot(SteamId newPlayer)
-{
-    // Authority sends current satellite state
-    // Each scene manager sends player positions
-    // etc.
-}
-```
+**Solution Implemented:**
+See P1 Implementation Details section below for complete implementation.
 
-### 4. Missing Push-to-Talk State Sync
+### 5. Missing Push-to-Talk State Sync ✅ COMPLETED
 
-**Problem:** VoiceSessionManager should know when remote Ground Control players are at their console (for the "Ground control player only sends voice data when interacting with transmission console" rule).
+**Problem:** VoiceSessionManager needed to know when remote Ground Control players are at their console.
 
-**Current:** `playersAtConsole` HashSet exists but is only updated locally.
-
-**Recommended Fix:**
-Broadcast console interaction state:
-```csharp
-public void SetLocalPlayerAtConsole(bool atConsole)
-{
-    isLocalPlayerAtConsole = atConsole;
-
-    // Broadcast to all peers
-    byte[] packet = new byte[10];
-    packet[0] = (byte)NetworkMessageType.ConsoleInteraction; // New message type
-    // ... serialize state
-    NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
-}
-```
+**Solution Implemented:**
+See P1 Implementation Details section below for complete implementation.
 
 ---
 
@@ -314,12 +280,14 @@ public class SatelliteGameVoicePolicy : IVoiceSendingPolicy
 }
 ```
 
-### 2. Centralize Sync Component Management
+### 2. Centralize Sync Component Management ✅ IMPLEMENTED
 
-Create `NetworkSyncManager` to:
-- Register handlers once
-- Route packets to correct objects
-- Handle object lifecycle (spawn/destroy)
+`NetworkSyncManager` has been implemented to:
+- Register handlers once (prevents duplicate registrations)
+- Route packets to correct objects via NetworkIdentity lookup
+- Eliminates per-component handler registration issues
+
+See `Assets/Scripts/Networking/Sync/NetworkSyncManager.cs`
 
 ### 3. Add Connection State Machine
 
@@ -338,18 +306,25 @@ Consider: Host authority or explicit authority assignment for clearer ownership.
 
 ## Priority Order
 
-### P0 - Critical (Spec Violations)
-1. **Voice model rewrite** - Implement dual-mode voice (auto + PTT)
+### P0 - Critical (Spec Violations) - COMPLETED
+1. ~~**Voice model rewrite** - Implement dual-mode voice (auto + PTT)~~ DONE
    - Lobby: auto-voice to all (no PTT)
    - Ground Control: auto-voice to Ground, console-gated to Space
    - Space: auto-voice to nearby Space (proximity), 'B' PTT to Ground
-2. **Lobby: no player prefabs** - Use voice proxies only
-3. **Add 'B' key for cross-role PTT** in VoiceChatP2P
+2. ~~**Lobby: no player prefabs** - Use voice proxies only~~ DONE
+3. ~~**Add 'B' key for cross-role PTT** in VoiceChatP2P~~ DONE
 
-### P1 - Important
-4. Handler registration cleanup
-5. Console interaction state sync
-6. Late-join synchronization
+### P1 - Important - COMPLETED
+4. ~~Handler registration cleanup~~ DONE - NetworkSyncManager centralizes all sync handlers
+5. ~~Console interaction state sync (broadcast to peers when at console)~~ DONE
+   - Added ConsoleInteraction message type (0x45)
+   - VoiceSessionManager broadcasts console state to all peers
+   - Remote console states tracked in playersAtConsole HashSet
+6. ~~Late-join synchronization~~ DONE
+   - Added StateSnapshotRequest (0x50) and StateSnapshotResponse (0x51) messages
+   - SatelliteStateManager handles snapshot requests/responses
+   - Authority sends full satellite state (health, damage bits, console states)
+   - PlayerStateManager automatically requests snapshot on join
 
 ### P2 - Nice to Have
 7. Connection state machine
@@ -358,14 +333,71 @@ Consider: Host authority or explicit authority assignment for clearer ownership.
 
 ---
 
-## Implementation Estimate
+## Implementation Status
 
-| Task | Complexity | Files Changed |
-|------|------------|---------------|
-| Voice model rewrite (auto + PTT) | High | VoiceChatP2P.cs, VoiceSessionManager.cs |
-| Lobby voice-only (no prefabs) | Low | LobbyNetworkingManager.cs |
-| Add proximity check to voice sending | Medium | VoiceChatP2P.cs (needs player position access) |
-| Console state sync | Low | VoiceSessionManager.cs, NetworkMessageType.cs |
-| Handler registration fix | Medium | All Sync components, new manager |
-| Late-join sync | High | Multiple state managers |
-| Connection state machine | High | NetworkConnectionManager.cs, new component |
+| Task | Complexity | Status |
+|------|------------|--------|
+| Voice model rewrite (auto + PTT) | High | DONE |
+| Lobby voice-only (no prefabs) | Low | DONE |
+| Add proximity check to voice sending | Medium | DONE |
+| Console state sync | Low | DONE |
+| Handler registration fix | Medium | DONE |
+| Late-join sync | High | DONE |
+| Connection state machine | High | Pending |
+
+---
+
+## P1 Implementation Details
+
+### Console Interaction State Sync
+**Status:** ✅ COMPLETED
+
+**Changes Made:**
+1. Added `ConsoleInteraction` message type (0x45) to NetworkMessageType enum
+2. Updated VoiceSessionManager:
+   - `SetLocalPlayerAtConsole()` now broadcasts state to all peers via `BroadcastConsoleInteraction()`
+   - Added `OnReceiveConsoleInteraction()` handler to receive remote console states
+   - Console state tracked in `playersAtConsole` HashSet for all players
+3. NetworkConnectionManager handler registration in VoiceSessionManager.Awake()
+
+**Message Format:**
+```
+ConsoleInteraction: [Type(1)][SteamId(8)][AtConsole(1)]
+```
+
+### Late-Join Synchronization
+**Status:** ✅ COMPLETED
+
+**Changes Made:**
+1. Added message types to NetworkMessageType enum:
+   - `StateSnapshotRequest` (0x50)
+   - `StateSnapshotResponse` (0x51)
+
+2. Updated SatelliteStateManager:
+   - Added `RequestStateSnapshot()` - sends request to all peers
+   - Added `OnReceiveStateSnapshotRequest()` - authority responds with full state
+   - Added `SendStateSnapshot()` - packages and sends complete state to requester
+   - Added `OnReceiveStateSnapshotResponse()` - applies received snapshot
+   - Registered new message handlers in Awake()
+
+3. Updated PlayerStateManager:
+   - Modified `UpdatePlayerState()` to detect new players joining
+   - Added automatic state snapshot request for late-joiners
+   - Added `RequestStateSnapshotFromAuthority()` and `DelayedStateSnapshotRequest()`
+
+**State Snapshot Contents:**
+- Satellite health (float)
+- Component damage bits (uint32)
+- Console states (count + data for each console)
+  - Console ID, state byte, payload length, payload
+- Player state count (reserved for future expansion)
+
+**Message Format:**
+```
+StateSnapshotRequest: [Type(1)][RequesterSteamId(8)]
+StateSnapshotResponse: [Type(1)][Health(4)][DamageBits(4)][ConsoleCount(2)][ConsoleData(N)][PlayerCount(1)][PlayerData(N)]
+```
+
+---
+
+## Implementation Estimate

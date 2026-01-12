@@ -14,8 +14,8 @@ namespace SatelliteGameJam.Networking.Sync
     /// </summary>
     [RequireComponent(typeof(NetworkIdentity))]
     public class NetworkInteractionState : MonoBehaviour
-{
-    private NetworkIdentity netIdentity;
+    {
+        private NetworkIdentity netIdentity;
     private SteamId currentOwner;
     
     private bool IsOwned => currentOwner != 0;
@@ -28,9 +28,7 @@ namespace SatelliteGameJam.Networking.Sync
     private void Awake()
     {
         netIdentity = GetComponent<NetworkIdentity>();
-        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.InteractionPickup, OnReceivePickup);
-        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.InteractionDrop, OnReceiveDrop);
-        NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.InteractionUse, OnReceiveUse);
+        // Handler registration moved to NetworkSyncManager (centralized)
     }
     
     /// <summary>
@@ -106,10 +104,12 @@ namespace SatelliteGameJam.Networking.Sync
     
     /// <summary>
     /// Handles incoming pickup event packets.
+    /// Called by NetworkSyncManager after dispatching by NetworkId.
     /// </summary>
-    private void OnReceivePickup(SteamId sender, byte[] data)
+    public void HandlePickup(SteamId sender, byte[] data)
     {
         // Packet deserialization and ownership update
+        // NetworkSyncManager already validated NetworkId and dispatched to us
         const int expectedLength = 13;
         if (data == null || data.Length < expectedLength)
         {
@@ -117,9 +117,8 @@ namespace SatelliteGameJam.Networking.Sync
             return;
         }
 
-        int offset = 1;
-        uint netId = NetworkSerialization.ReadUInt(data, ref offset);
-        if (netId != netIdentity.NetworkId) return;
+        // Skip past message type (1) and NetworkId (4)
+        int offset = 5;
 
         SteamId pickerId = NetworkSerialization.ReadULong(data, ref offset);
         currentOwner = pickerId;
@@ -130,8 +129,9 @@ namespace SatelliteGameJam.Networking.Sync
     
     /// <summary>
     /// Handles incoming drop event packets.
+    /// Called by NetworkSyncManager after dispatching by NetworkId.
     /// </summary>
-    private void OnReceiveDrop(SteamId sender, byte[] data)
+    public void HandleDrop(SteamId sender, byte[] data)
     {
         // Packet deserialization and object placement
         const int expectedLength = 37;
@@ -141,9 +141,8 @@ namespace SatelliteGameJam.Networking.Sync
             return;
         }
 
-        int offset = 1;
-        uint netId = NetworkSerialization.ReadUInt(data, ref offset);
-        if (netId != netIdentity.NetworkId) return;
+        // Skip past message type (1) and NetworkId (4)
+        int offset = 5;
         
         SteamId dropperId = NetworkSerialization.ReadULong(data, ref offset);
         Vector3 dropPos = NetworkSerialization.ReadVector3(data, ref offset);
@@ -161,8 +160,9 @@ namespace SatelliteGameJam.Networking.Sync
     
     /// <summary>
     /// Handles incoming use event packets.
+    /// Called by NetworkSyncManager after dispatching by NetworkId.
     /// </summary>
-    private void OnReceiveUse(SteamId sender, byte[] data)
+    public void HandleUse(SteamId sender, byte[] data)
     {
         // Packet deserialization and use callback
         const int expectedLength = 13;
@@ -172,9 +172,8 @@ namespace SatelliteGameJam.Networking.Sync
             return;
         }
 
-        int offset = 1;
-        uint netId = NetworkSerialization.ReadUInt(data, ref offset);
-        if (netId != netIdentity.NetworkId) return;
+        // Skip past message type (1) and NetworkId (4)
+        int offset = 5;
 
         SteamId userId = NetworkSerialization.ReadULong(data, ref offset);
         OnUsed?.Invoke(userId);

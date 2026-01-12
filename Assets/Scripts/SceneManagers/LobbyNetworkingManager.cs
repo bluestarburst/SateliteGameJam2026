@@ -10,9 +10,9 @@ namespace SatelliteGameJam.SceneManagers
 {
     /// <summary>
     /// Scene-specific networking manager for Lobby scene.
-    /// Spawns remote player models, manages lobby voice chat, handles ready states.
-    /// All players can hear each other in the lobby.
-    /// Refs: DeveloperExperienceImprovements.md Part 2
+    /// Creates voice proxies (NOT full player prefabs) for remote players.
+    /// All players can hear each other in the lobby via auto-voice.
+    /// Refs: DeveloperExperienceImprovements.md Part 2, networking-states.md
     /// </summary>
     public class LobbyNetworkingManager : MonoBehaviour
     {
@@ -75,75 +75,56 @@ namespace SatelliteGameJam.SceneManagers
         }
 
         /// <summary>
-        /// Spawns player models for all existing lobby members (except local player).
+        /// Creates voice proxies for all existing lobby members (except local player).
+        /// No player prefabs are spawned in lobby - only voice proxies for audio playback.
         /// </summary>
         private void SpawnExistingPlayers()
         {
             if (SteamManager.Instance == null)
             {
-                if (logDebug) Debug.LogWarning("[Lobby] Cannot spawn players - SteamManager not ready");
+                if (logDebug) Debug.LogWarning("[Lobby] Cannot create voice proxies - SteamManager not ready");
                 return;
             }
 
-            if (config == null || !config.autoSpawnPlayers)
-            {
-                if (logDebug) Debug.Log("[Lobby] Auto-spawn disabled in config");
-                return;
-            }
-
-            int spawnedCount = 0;
+            int createdCount = 0;
             foreach (var member in SteamManager.Instance.currentLobby.Members)
             {
                 if (member.Id != SteamManager.Instance.PlayerSteamId)
                 {
-                    SpawnRemotePlayer(member.Id, member.Name);
-                    spawnedCount++;
+                    CreateVoiceProxyForPlayer(member.Id, member.Name);
+                    createdCount++;
                 }
             }
 
             if (logDebug || (config != null && config.verboseLogging))
             {
-                Debug.Log($"[Lobby] Spawned {spawnedCount} existing lobby players");
+                Debug.Log($"[Lobby] Created {createdCount} voice proxies for existing lobby players");
             }
         }
 
         /// <summary>
-        /// Spawns a remote player model for the given SteamId.
+        /// Creates a voice proxy for the given SteamId.
+        /// No player prefab is spawned - only a lightweight voice proxy for audio playback.
         /// </summary>
-        private void SpawnRemotePlayer(SteamId steamId, string displayName)
+        private void CreateVoiceProxyForPlayer(SteamId steamId, string displayName)
         {
             if (spawnedPlayers.Contains(steamId))
             {
-                if (logDebug) Debug.LogWarning($"[Lobby] Player {displayName} already spawned");
+                if (logDebug) Debug.LogWarning($"[Lobby] Voice proxy for {displayName} already exists");
                 return;
             }
 
-            if (config == null || config.remotePlayerPrefab == null)
+            // Create voice proxy via VoiceSessionManager (lightweight AudioSource only)
+            if (VoiceSessionManager.Instance != null)
             {
-                if (logDebug) Debug.LogWarning("[Lobby] No player prefab configured");
-                return;
+                VoiceSessionManager.Instance.GetOrCreateVoiceRemotePlayer(steamId);
             }
-
-            // Spawn via NetworkConnectionManager
-            NetworkConnectionManager.Instance?.SpawnRemotePlayerFor(steamId, displayName);
 
             spawnedPlayers.Add(steamId);
 
-            // Register with voice system for proximity audio
-            // Note: In lobby, proximity doesn't matter - everyone hears everyone
-            if (VoiceSessionManager.Instance != null)
-            {
-                // Get the spawned player GameObject
-                var playerGO = GameObject.Find($"RemotePlayer_{displayName}");
-                if (playerGO != null)
-                {
-                    VoiceSessionManager.Instance.RegisterRemotePlayerAvatar(steamId, playerGO);
-                }
-            }
-
             if (logDebug || (config != null && config.verboseLogging))
             {
-                Debug.Log($"[Lobby] Spawned remote player: {displayName}");
+                Debug.Log($"[Lobby] Created voice proxy for: {displayName}");
             }
         }
 
@@ -154,14 +135,14 @@ namespace SatelliteGameJam.SceneManagers
         {
             if (logDebug) Debug.Log($"[Lobby] Player joined: {steamId}");
 
-            // Find player in lobby members and spawn if found
+            // Find player in lobby members and create voice proxy
             if (SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount > 0)
             {
                 foreach (var member in SteamManager.Instance.currentLobby.Members)
                 {
                     if (member.Id == steamId)
                     {
-                        SpawnRemotePlayer(steamId, member.Name);
+                        CreateVoiceProxyForPlayer(steamId, member.Name);
                         return;
                     }
                 }
@@ -179,27 +160,21 @@ namespace SatelliteGameJam.SceneManagers
             {
                 spawnedPlayers.Remove(steamId);
 
-                // Despawn via NetworkConnectionManager
-                NetworkConnectionManager.Instance?.DespawnRemotePlayer(steamId);
-
-                // Unregister from voice system
-                if (VoiceSessionManager.Instance != null)
-                {
-                    VoiceSessionManager.Instance.UnregisterRemotePlayer(steamId);
-                }
+                // Clean up voice proxy
+                VoiceSessionManager.Instance?.UnregisterRemotePlayer(steamId);
             }
         }
 
         /// <summary>
-        /// Cleans up all spawned player models.
+        /// Cleans up all voice proxies.
         /// </summary>
         private void CleanupSpawnedPlayers()
         {
-            if (logDebug) Debug.Log($"[Lobby] Cleaning up {spawnedPlayers.Count} spawned players");
+            if (logDebug) Debug.Log($"[Lobby] Cleaning up {spawnedPlayers.Count} voice proxies");
 
             foreach (var steamId in spawnedPlayers)
             {
-                NetworkConnectionManager.Instance?.DespawnRemotePlayer(steamId);
+                VoiceSessionManager.Instance?.UnregisterRemotePlayer(steamId);
             }
 
             spawnedPlayers.Clear();

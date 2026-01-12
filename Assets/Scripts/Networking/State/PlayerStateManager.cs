@@ -137,17 +137,53 @@ namespace SatelliteGameJam.Networking.State
     /// </summary>
     private void UpdatePlayerState(SteamId steamId, NetworkSceneId? scene = null, PlayerRole? role = null, bool? isReady = null)
     {
+        bool isNewPlayer = false;
+        
         if (!playerStates.TryGetValue(steamId, out var state))
         {
             state = new PlayerState { SteamId = steamId };
             playerStates[steamId] = state;
-            OnPlayerJoined?.Invoke(steamId);
+            isNewPlayer = true;
         }
 
         if (scene.HasValue) state.Scene = scene.Value;
         if (role.HasValue) state.Role = role.Value;
         if (isReady.HasValue) state.IsReady = isReady.Value;
         state.LastUpdateTime = Time.time;
+        
+        if (isNewPlayer)
+        {
+            OnPlayerJoined?.Invoke(steamId);
+            
+            // If the local player is joining and this is a remote player, request state snapshot
+            // This ensures late-joiners get current game state
+            if (steamId == SteamManager.Instance.PlayerSteamId && playerStates.Count > 1)
+            {
+                RequestStateSnapshotFromAuthority();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Requests a state snapshot when joining an existing game session.
+    /// </summary>
+    private void RequestStateSnapshotFromAuthority()
+    {
+        // Request from SatelliteStateManager
+        if (SatelliteStateManager.Instance != null)
+        {
+            // Small delay to ensure network is fully initialized
+            Invoke(nameof(DelayedStateSnapshotRequest), 0.5f);
+        }
+    }
+
+    private void DelayedStateSnapshotRequest()
+    {
+        if (SatelliteStateManager.Instance != null)
+        {
+            SatelliteStateManager.Instance.RequestStateSnapshot();
+            Debug.Log("[PlayerStateManager] Requested state snapshot as late-joiner");
+        }
     }
 
     /// <summary>
