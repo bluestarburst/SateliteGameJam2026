@@ -26,6 +26,8 @@ public class LobbyPlayersView : MonoBehaviour
     public UnityEngine.Color groundTeamColor = new UnityEngine.Color(0.8f, 0.5f, 0.5f);
     public UnityEngine.Color defaultColor = new UnityEngine.Color(1f, 1f, 1f);
 
+    public bool debugMode = false;
+
     private void Start()
     {
         if (SteamManager.Instance == null || !SteamManager.Instance.ConnectedToSteam())
@@ -68,8 +70,13 @@ public class LobbyPlayersView : MonoBehaviour
     {
         if (SteamManager.Instance == null || !SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
         {
-            Debug.Log("Cannot start game - not enough players.");
             startButton.SetActive(false);
+            return;
+        }
+
+        if (debugMode)
+        {
+            startButton.SetActive(true);
             return;
         }
 

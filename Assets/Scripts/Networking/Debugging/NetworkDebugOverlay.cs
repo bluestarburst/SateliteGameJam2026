@@ -4,6 +4,7 @@ using UnityEngine;
 using SatelliteGameJam.Networking.Core;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Identity;
+using UnityEngine.InputSystem;
 
 namespace SatelliteGameJam.Networking.Debugging
 {
@@ -17,8 +18,10 @@ namespace SatelliteGameJam.Networking.Debugging
     {
         public static NetworkDebugOverlay Instance { get; private set; }
 
+        [SerializeField] NetworkingConfiguration config;
+
         [SerializeField] private bool startEnabled = true;
-        [SerializeField] private KeyCode toggleKey = KeyCode.Tab;
+        [SerializeField] private Key toggleKey = Key.Tab;
         
         private bool isVisible = true;
         private Rect windowRect = new Rect(10, 10, 450, 650);
@@ -52,7 +55,7 @@ namespace SatelliteGameJam.Networking.Debugging
         private void Update()
         {
             // Toggle overlay with configured key
-            if (Input.GetKeyDown(toggleKey))
+            if (Keyboard.current[toggleKey].wasPressedThisFrame)
             {
                 ToggleOverlay();
             }

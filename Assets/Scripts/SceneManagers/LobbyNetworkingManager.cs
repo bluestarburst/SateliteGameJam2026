@@ -154,10 +154,17 @@ namespace SatelliteGameJam.SceneManagers
         {
             if (logDebug) Debug.Log($"[Lobby] Player joined: {steamId}");
 
-            var member = SteamManager.Instance?.currentLobby.GetMember(steamId);
-            if (member.HasValue)
+            // Find player in lobby members and spawn if found
+            if (SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount > 0)
             {
-                SpawnRemotePlayer(steamId, member.Value.Name);
+                foreach (var member in SteamManager.Instance.currentLobby.Members)
+                {
+                    if (member.Id == steamId)
+                    {
+                        SpawnRemotePlayer(steamId, member.Name);
+                        return;
+                    }
+                }
             }
         }
 

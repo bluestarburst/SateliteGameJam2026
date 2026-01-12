@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Steamworks;
+using Steamworks.Data;
 using UnityEngine;
 
 namespace SatelliteGameJam.Networking.Core.Abstractions

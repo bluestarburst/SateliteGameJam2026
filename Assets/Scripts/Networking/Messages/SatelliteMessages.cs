@@ -100,7 +100,7 @@ namespace SatelliteGameJam.Networking.Messages
     /// </summary>
     public class PlayerRoleMessage : INetworkMessage
     {
-        public byte MessageTypeId => (byte)NetworkMessageType.PlayerRole;
+        public byte MessageTypeId => 0x03; // Custom message type ID
         public int Channel => 0;
         public bool RequireReliable => true;
 
@@ -142,7 +142,7 @@ namespace SatelliteGameJam.Networking.Messages
     /// </summary>
     public class SceneTransitionMessage : INetworkMessage
     {
-        public byte MessageTypeId => (byte)NetworkMessageType.SceneChange;
+        public byte MessageTypeId => 0x04; // Custom message type ID
         public int Channel => 0;
         public bool RequireReliable => true;
 
@@ -262,7 +262,7 @@ namespace SatelliteGameJam.Networking.Messages
     /// </summary>
     public class ObjectInteractionMessage : INetworkMessage
     {
-        public byte MessageTypeId => (byte)NetworkMessageType.ObjectInteraction;
+        public byte MessageTypeId => 0x05; // Custom message type ID
         public int Channel => 0;
         public bool RequireReliable => true;
 

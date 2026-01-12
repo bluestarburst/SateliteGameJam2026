@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd813ab24dc0f4b9ea4dbccb07b097a7, type: 3}
+  m_Name: NetworkingConfiguration
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.NetworkingConfiguration
+  steamAppId: 480
+  channelsToPoll: 00000000010000000300000004000000
+  sendTimeoutSeconds: 5
+  maxRetryAttempts: 3
+  autoSpawnPlayers: 1
+  remotePlayerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
+  cleanupPlayersOnSceneChange: 1
+  lobbySceneName: Lobby
+  groundControlSceneName: BaseStation
+  spaceStationSceneName: Satellite
+  sceneChangeTimeoutSeconds: 10
+  voiceChatEnabled: 1
+  voiceActivationThreshold: 0.3
+  proximityVoiceDistance: 20
+  useRoleBasedVoiceGating: 1
+  transformSyncRate: 30
+  physicsSyncRate: 20
+  useInterpolation: 1
+  interpolationDelayMs: 100
+  filterSatelliteMessagesByScene: 1
+  satelliteHealthUpdateRate: 5
+  verboseLogging: 0
+  showNetworkDebugOverlay: 1
+  showPacketStatistics: 1
+  autoReconnect: 1
+  maxReconnectAttempts: 3
+  reconnectDelaySeconds: 2
+  useExtensibleMessageSystem: 0
+  autoRegisterBuiltinMessages: 1
+  customMessageAssemblies: []
+  transportLayerType: SteamP2PTransport
