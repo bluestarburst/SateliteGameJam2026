@@ -211,12 +211,18 @@ namespace SatelliteGameJam.Networking.State
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            // Quick Fix #1: Clean up remote player models when transitioning scenes
-            if (NetworkConnectionManager.Instance != null)
+            // CRITICAL FIX: Only clean up remote player prefabs when NOT in Lobby/Matchmaking
+            // Lobby uses voice proxies managed by LobbyNetworkingManager
+            // Cleaning up on entry to Lobby would destroy those voice proxies immediately after creation
+            bool isLobbyOrMatchmaking = scene.name == LobbySceneName || scene.name == "Matchmaking";
+
+            if (NetworkConnectionManager.Instance != null && !isLobbyOrMatchmaking)
             {
+                // Clean up when entering gameplay scenes (Ground Control/Space Station)
+                // This ensures old prefabs from previous scene are removed
                 NetworkConnectionManager.Instance.CleanupAllRemotePlayers();
             }
-            
+
             SendSceneAck();
         }
 

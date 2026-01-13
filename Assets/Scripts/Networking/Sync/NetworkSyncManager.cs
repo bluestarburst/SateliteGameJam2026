@@ -44,6 +44,16 @@ namespace SatelliteGameJam.Networking.Sync
             }
         }
 
+        private void Update()
+        {
+            // CRITICAL FIX: Re-register handlers if NetworkConnectionManager was recreated
+            // This can happen during scene transitions if there are DontDestroyOnLoad conflicts
+            if (!handlersRegistered && NetworkConnectionManager.Instance != null)
+            {
+                RegisterHandlers();
+            }
+        }
+
         /// <summary>
         /// Registers all sync message handlers once.
         /// </summary>

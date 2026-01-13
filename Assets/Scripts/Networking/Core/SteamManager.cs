@@ -8,6 +8,8 @@ using Steamworks.Data;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using SatelliteGameJam.Networking.Core;
+using SatelliteGameJam.Networking.State;
+using SatelliteGameJam.Networking.Messages;
 
 /// <summary>
 /// Steamworks entry point that mirrors the Facepunch Steamworks tutorial core loop.
@@ -552,6 +554,17 @@ public class SteamManager : MonoBehaviour
     private void TryAutoSpawnRemotePlayer(SteamId steamId, string displayName)
     {
         if (NetworkConnectionManager.Instance == null) return;
+
+        // CRITICAL: Don't spawn remote player prefabs in the Lobby scene
+        // Lobby uses lightweight voice proxies only, managed by LobbyNetworkingManager
+        // See: RECOMMENDATIONS.md lines 175-208, ARCHITECTURE.md lines 202-206
+        var localState = PlayerStateManager.Instance?.GetPlayerState(PlayerSteamId);
+        if (localState != null && localState.Scene == NetworkSceneId.Lobby)
+        {
+            // Don't spawn - LobbyNetworkingManager will handle voice proxies
+            return;
+        }
+
         Debug.Log($"Attempting to spawn remote player for {steamId} ({displayName})");
         NetworkConnectionManager.Instance.SpawnRemotePlayerFor(steamId, displayName);
     }
