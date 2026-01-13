@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 188199318739152681}
   - component: {fileID: -8296308176359235256}
   - component: {fileID: 9208811232495926739}
+  - component: {fileID: 9121032266710553835}
   m_Layer: 0
   m_Name: SteamPack
   m_TagString: Untagged
@@ -142,3 +143,20 @@ MonoBehaviour:
   config: {fileID: 11400000, guid: 99a0cea8ac864415ebf40d2b2fc874d1, type: 2}
   startEnabled: 1
   toggleKey: 9
+--- !u!114 &9121032266710553835
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d3befe8d2604418caa9c3a44b7aba6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.VoiceChatP2P
+  crossRolePTTKey: 16
+  alwaysRecord: 0
+  voiceChannel: 2
+  debugLogging: 0
+  isSending: 0
