@@ -21,6 +21,7 @@ namespace SatelliteGameJam.Networking.Sync
         [SerializeField] private bool debugLogging = false;
 
         private bool handlersRegistered = false;
+        private NetworkConnectionManager lastRegisteredManager = null;
 
         private void Awake()
         {
@@ -48,9 +49,14 @@ namespace SatelliteGameJam.Networking.Sync
         {
             // CRITICAL FIX: Re-register handlers if NetworkConnectionManager was recreated
             // This can happen during scene transitions if there are DontDestroyOnLoad conflicts
-            if (!handlersRegistered && NetworkConnectionManager.Instance != null)
+            // Check both: if handlers aren't registered, OR if the manager instance changed
+            if (NetworkConnectionManager.Instance != null)
             {
-                RegisterHandlers();
+                if (!handlersRegistered || lastRegisteredManager != NetworkConnectionManager.Instance)
+                {
+                    handlersRegistered = false; // Reset flag to force re-registration
+                    RegisterHandlers();
+                }
             }
         }
 
@@ -83,6 +89,7 @@ namespace SatelliteGameJam.Networking.Sync
                 NetworkMessageType.InteractionUse, OnReceiveInteractionUse);
 
             handlersRegistered = true;
+            lastRegisteredManager = NetworkConnectionManager.Instance;
 
             if (debugLogging)
                 Debug.Log("[NetworkSyncManager] Registered all sync handlers");

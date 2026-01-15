@@ -904,6 +904,9 @@ GameObject:
   - component: {fileID: 402573099}
   - component: {fileID: 402573098}
   - component: {fileID: 402573105}
+  - component: {fileID: 402573108}
+  - component: {fileID: 402573107}
+  - component: {fileID: 402573106}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -1066,6 +1069,50 @@ MonoBehaviour:
   ScrollAction: {fileID: 1329317549}
   InteractorSource: {fileID: 1862938525}
   InteractRange: 2
+--- !u!114 &402573106
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 402573097}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3bcabf3f1a2c0449585083d20b239502, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Sync.LocalPlayerNetworkSetup
+  retryUntilReady: 1
+  retryDelay: 0.1
+  logDebug: 0
+--- !u!114 &402573107
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 402573097}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 195a96f8ceb994cee9bfb442e1ec44ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Identity.NetworkIdentity
+  networkId: 0
+--- !u!114 &402573108
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 402573097}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 292aaaea0ae7b4467b0f2b306c171906, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Sync.NetworkTransformSync
+  sendRate: 10
+  syncPosition: 1
+  syncRotation: 1
+  syncVelocity: 0
 --- !u!1 &554592259 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: ff86a46d5bd21a6468eaa30abb1be99d, type: 3}

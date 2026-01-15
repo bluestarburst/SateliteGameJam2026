@@ -555,13 +555,24 @@ public class SteamManager : MonoBehaviour
     {
         if (NetworkConnectionManager.Instance == null) return;
 
-        // CRITICAL: Don't spawn remote player prefabs in the Lobby scene
+        // CRITICAL: Don't spawn remote player prefabs in the Lobby or Matchmaking scenes
         // Lobby uses lightweight voice proxies only, managed by LobbyNetworkingManager
-        // See: RECOMMENDATIONS.md lines 175-208, ARCHITECTURE.md lines 202-206
+        // Matchmaking scene doesn't need remote player prefabs at all
+        // Check both: local player's state AND current scene name (scene name is more reliable during transitions)
+        string currentSceneName = SceneManager.GetActiveScene().name;
+        bool isLobbyOrMatchmaking = currentSceneName == "Lobby" || currentSceneName == "Matchmaking";
+
+        // Also check PlayerStateManager as a secondary check
         var localState = PlayerStateManager.Instance?.GetPlayerState(PlayerSteamId);
         if (localState != null && localState.Scene == NetworkSceneId.Lobby)
         {
-            // Don't spawn - LobbyNetworkingManager will handle voice proxies
+            isLobbyOrMatchmaking = true;
+        }
+
+        if (isLobbyOrMatchmaking)
+        {
+            // Don't spawn - LobbyNetworkingManager will handle voice proxies in Lobby
+            Debug.Log($"[SteamManager] Skipping remote player spawn for {displayName} in {currentSceneName} scene");
             return;
         }
 
