@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1411251398165649952}
   - component: {fileID: 3549309175554565782}
   - component: {fileID: 7202338266808824058}
+  - component: {fileID: 2090319483482309890}
   - component: {fileID: 2977847412604982697}
   - component: {fileID: -354346587164634655}
   - component: {fileID: 188199318739152681}
@@ -70,6 +71,19 @@ MonoBehaviour:
   channelsToPoll: 00000000010000000300000004000000
   autoSpawnPlayer: 0
   playerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
+--- !u!114 &2090319483482309890
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8fe3735ac2bb4234bee14d6344fc6da, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Sync.NetworkSyncManager
+  debugLogging: 1
 --- !u!114 &2977847412604982697
 MonoBehaviour:
   m_ObjectHideFlags: 0
