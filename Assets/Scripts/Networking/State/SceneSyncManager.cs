@@ -67,6 +67,7 @@ namespace SatelliteGameJam.Networking.State
             if (PlayerStateManager.Instance != null)
             {
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+                PlayerStateManager.Instance.OnPlayerSceneChanged += OnRemotePlayerSceneChanged;
             }
         }
 
@@ -80,6 +81,7 @@ namespace SatelliteGameJam.Networking.State
             if (PlayerStateManager.Instance != null)
             {
                 PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
+                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnRemotePlayerSceneChanged;
             }
             SceneManager.sceneLoaded -= OnSceneLoaded;
         }
@@ -221,9 +223,104 @@ namespace SatelliteGameJam.Networking.State
                 // Clean up when entering gameplay scenes (Ground Control/Space Station)
                 // This ensures old prefabs from previous scene are removed
                 NetworkConnectionManager.Instance.CleanupAllRemotePlayers();
+
+                // Spawn remote players for this game scene after a short delay
+                // This gives time for network messages to arrive with player scene states
+                Invoke(nameof(SpawnPlayersForCurrentScene), 0.2f);
             }
 
             SendSceneAck();
+        }
+
+        /// <summary>
+        /// Spawns remote players who are in the same scene as the local player.
+        /// Called automatically after loading a game scene (not Lobby/Matchmaking).
+        /// </summary>
+        private void SpawnPlayersForCurrentScene()
+        {
+            if (SteamManager.Instance == null || PlayerStateManager.Instance == null)
+            {
+                if (logDebug) Debug.LogWarning("[SceneSync] Cannot spawn players - managers not ready");
+                return;
+            }
+
+            var localState = PlayerStateManager.Instance.GetPlayerState(SteamManager.Instance.PlayerSteamId);
+            NetworkSceneId localScene = localState.Scene;
+
+            if (localScene == NetworkSceneId.None || localScene == NetworkSceneId.Lobby)
+            {
+                if (logDebug) Debug.Log("[SceneSync] Not in a game scene, skipping player spawn");
+                return;
+            }
+
+            int spawnedCount = 0;
+            foreach (var member in SteamManager.Instance.currentLobby.Members)
+            {
+                // Skip local player
+                if (member.Id == SteamManager.Instance.PlayerSteamId) continue;
+
+                var playerState = PlayerStateManager.Instance.GetPlayerState(member.Id);
+
+                // Spawn players who are in the same scene OR have matching role but scene not yet set
+                bool sameScene = playerState.Scene == localScene;
+                bool matchingRole = playerState.Scene == NetworkSceneId.None &&
+                    ((localScene == NetworkSceneId.GroundControl && playerState.Role == PlayerRole.GroundControl) ||
+                     (localScene == NetworkSceneId.SpaceStation && playerState.Role == PlayerRole.SpaceStation));
+
+                if (sameScene || matchingRole)
+                {
+                    NetworkConnectionManager.Instance?.SpawnRemotePlayerFor(member.Id, member.Name);
+                    spawnedCount++;
+
+                    if (logDebug)
+                    {
+                        Debug.Log($"[SceneSync] Spawned remote player {member.Name} for scene {localScene}");
+                    }
+                }
+            }
+
+            if (logDebug)
+            {
+                Debug.Log($"[SceneSync] Spawned {spawnedCount} remote players for scene {localScene}");
+            }
+        }
+
+        /// <summary>
+        /// Called when any player's scene changes. Spawns remote players who enter the same scene as local player.
+        /// </summary>
+        private void OnRemotePlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
+        {
+            // Skip local player - we only care about remote players joining our scene
+            if (SteamManager.Instance != null && steamId == SteamManager.Instance.PlayerSteamId)
+                return;
+
+            // Get local player's scene
+            var localState = PlayerStateManager.Instance?.GetPlayerState(SteamManager.Instance.PlayerSteamId);
+            if (localState == null) return;
+
+            NetworkSceneId localScene = localState.Scene;
+
+            // Only spawn if they're joining the same scene as us AND we're in a game scene
+            if (sceneId == localScene && localScene != NetworkSceneId.None && localScene != NetworkSceneId.Lobby)
+            {
+                // Get display name from lobby
+                string displayName = "Unknown";
+                foreach (var member in SteamManager.Instance.currentLobby.Members)
+                {
+                    if (member.Id == steamId)
+                    {
+                        displayName = member.Name;
+                        break;
+                    }
+                }
+
+                NetworkConnectionManager.Instance?.SpawnRemotePlayerFor(steamId, displayName);
+
+                if (logDebug)
+                {
+                    Debug.Log($"[SceneSync] Late spawn: {displayName} joined scene {sceneId}");
+                }
+            }
         }
 
         private string ResolveSceneName(NetworkSceneId sceneId)
