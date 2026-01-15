@@ -166,6 +166,7 @@ namespace SatelliteGameJam.Networking.Voice
             if (targetState == null) return false;
 
             // Lobby: Send to everyone (PTT already checked in ShouldRecordVoice)
+            Debug.Log($"[VoiceChatP2P] Checking voice send from {localState.Role} to {targetState.Role} in scene {localState.Scene}");
             if (localState.Scene == NetworkSceneId.Lobby)
             {
                 return true;
