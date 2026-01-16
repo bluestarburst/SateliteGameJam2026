@@ -18,7 +18,7 @@ public class TransmissionInteract : MonoBehaviour, IInteractable
 
     public void Interact(GroundPlayerInteractor interactor) {
         answeringTransmission = !answeringTransmission;
-        // VoiceSessionManager.Instance.SetLocalPlayerAtConsole(answeringTransmission);
+        VoiceSessionManager.Instance.SetLocalPlayerAtConsole(answeringTransmission);
         if (answeringTransmission) {
             interactor.restrictMovementTo(transform.position, tetherDistance);
             cable.SetActive(true);
