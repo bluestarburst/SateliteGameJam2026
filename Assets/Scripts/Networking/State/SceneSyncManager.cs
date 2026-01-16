@@ -18,7 +18,10 @@ namespace SatelliteGameJam.Networking.State
     {
         public static SceneSyncManager Instance { get; private set; }
 
-        [Header("Scene Names")]
+        [Header("Configuration")]
+        [SerializeField] private NetworkingConfiguration config;
+
+        [Header("Fallback Scene Names (if no config assigned)")]
         [SerializeField] private string lobbySceneName = "Lobby";
         [SerializeField] private string groundControlSceneName = "GroundControl";
         [SerializeField] private string spaceStationSceneName = "SpaceStation";
@@ -28,6 +31,12 @@ namespace SatelliteGameJam.Networking.State
         [SerializeField] private bool logDebug = true;
 
         private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
+
+        // Properties for accessing configuration
+        private string LobbySceneName => config != null ? config.lobbySceneName : lobbySceneName;
+        private string GroundControlSceneName => config != null ? config.groundControlSceneName : groundControlSceneName;
+        private string SpaceStationSceneName => config != null ? config.spaceStationSceneName : spaceStationSceneName;
+        private float SceneChangeTimeout => config != null ? config.sceneChangeTimeoutSeconds : sceneChangeTimeoutSeconds;
 
         private void Awake()
         {
@@ -39,18 +48,27 @@ namespace SatelliteGameJam.Networking.State
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            if (NetworkConnectionManager.Instance != null)
+            RegisterHandlers();
+            SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        private void RegisterHandlers()
+        {
+            if (NetworkConnectionManager.Instance == null)
             {
-                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
-                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeAcknowledge, OnReceiveSceneChangeAcknowledge);
+                Debug.LogWarning("[SceneSync] NetworkConnectionManager not found. Retrying...");
+                Invoke(nameof(RegisterHandlers), 0.5f);
+                return;
             }
+
+            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
+            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SceneChangeAcknowledge, OnReceiveSceneChangeAcknowledge);
 
             if (PlayerStateManager.Instance != null)
             {
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+                PlayerStateManager.Instance.OnPlayerSceneChanged += OnRemotePlayerSceneChanged;
             }
-
-            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
         private void OnDestroy()
@@ -63,6 +81,7 @@ namespace SatelliteGameJam.Networking.State
             if (PlayerStateManager.Instance != null)
             {
                 PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
+                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnRemotePlayerSceneChanged;
             }
             SceneManager.sceneLoaded -= OnSceneLoaded;
         }
@@ -97,7 +116,10 @@ namespace SatelliteGameJam.Networking.State
 
         private bool IsOwner()
         {
-            return SteamManager.Instance != null && SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId);
+            if (SteamManager.Instance == null) return false;
+            var lobby = SteamManager.Instance.currentLobby;
+            if (lobby.Id.Value == 0) return false;
+            return lobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId);
         }
 
         private void BroadcastRoleBasedScenes()
@@ -145,19 +167,32 @@ namespace SatelliteGameJam.Networking.State
         {
             pendingAcks.Clear();
             if (SteamManager.Instance == null) return;
+            
+            // Cancel any pending timeout checks
+            CancelInvoke(nameof(CheckAckTimeout));
+            
             foreach (var m in SteamManager.Instance.currentLobby.Members)
             {
                 if (m.Id != SteamManager.Instance.PlayerSteamId)
                     pendingAcks.Add(m.Id);
             }
-            Invoke(nameof(CheckAckTimeout), sceneChangeTimeoutSeconds);
+            
+            if (pendingAcks.Count > 0)
+            {
+                Invoke(nameof(CheckAckTimeout), SceneChangeTimeout);
+            }
         }
 
         private void CheckAckTimeout()
         {
-            if (pendingAcks.Count > 0 && logDebug)
+            if (pendingAcks.Count > 0)
             {
-                Debug.Log($"[SceneSync] Ack timeout. Missing: {string.Join(", ", pendingAcks.Select(id => id.Value))}");
+                if (logDebug)
+                {
+                    Debug.LogWarning($"[SceneSync] Ack timeout. Missing: {string.Join(", ", pendingAcks.Select(id => id.Value))}");
+                }
+                // Clear pending acks to prevent stale state
+                pendingAcks.Clear();
             }
         }
 
@@ -178,16 +213,123 @@ namespace SatelliteGameJam.Networking.State
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            // CRITICAL FIX: Only clean up remote player prefabs when NOT in Lobby/Matchmaking
+            // Lobby uses voice proxies managed by LobbyNetworkingManager
+            // Cleaning up on entry to Lobby would destroy those voice proxies immediately after creation
+            bool isLobbyOrMatchmaking = scene.name == LobbySceneName || scene.name == "Matchmaking";
+
+            if (NetworkConnectionManager.Instance != null && !isLobbyOrMatchmaking)
+            {
+                // Clean up when entering gameplay scenes (Ground Control/Space Station)
+                // This ensures old prefabs from previous scene are removed
+                NetworkConnectionManager.Instance.CleanupAllRemotePlayers();
+
+                // Spawn remote players for this game scene after a short delay
+                // This gives time for network messages to arrive with player scene states
+                Invoke(nameof(SpawnPlayersForCurrentScene), 0.2f);
+            }
+
             SendSceneAck();
+        }
+
+        /// <summary>
+        /// Spawns remote players who are in the same scene as the local player.
+        /// Called automatically after loading a game scene (not Lobby/Matchmaking).
+        /// </summary>
+        private void SpawnPlayersForCurrentScene()
+        {
+            if (SteamManager.Instance == null || PlayerStateManager.Instance == null)
+            {
+                if (logDebug) Debug.LogWarning("[SceneSync] Cannot spawn players - managers not ready");
+                return;
+            }
+
+            var localState = PlayerStateManager.Instance.GetPlayerState(SteamManager.Instance.PlayerSteamId);
+            NetworkSceneId localScene = localState.Scene;
+
+            if (localScene == NetworkSceneId.None || localScene == NetworkSceneId.Lobby)
+            {
+                if (logDebug) Debug.Log("[SceneSync] Not in a game scene, skipping player spawn");
+                return;
+            }
+
+            int spawnedCount = 0;
+            foreach (var member in SteamManager.Instance.currentLobby.Members)
+            {
+                // Skip local player
+                if (member.Id == SteamManager.Instance.PlayerSteamId) continue;
+
+                var playerState = PlayerStateManager.Instance.GetPlayerState(member.Id);
+
+                // Spawn players who are in the same scene OR have matching role but scene not yet set
+                bool sameScene = playerState.Scene == localScene;
+                bool matchingRole = playerState.Scene == NetworkSceneId.None &&
+                    ((localScene == NetworkSceneId.GroundControl && playerState.Role == PlayerRole.GroundControl) ||
+                     (localScene == NetworkSceneId.SpaceStation && playerState.Role == PlayerRole.SpaceStation));
+
+                if (sameScene || matchingRole)
+                {
+                    NetworkConnectionManager.Instance?.SpawnRemotePlayerFor(member.Id, member.Name);
+                    spawnedCount++;
+
+                    if (logDebug)
+                    {
+                        Debug.Log($"[SceneSync] Spawned remote player {member.Name} for scene {localScene}");
+                    }
+                }
+            }
+
+            if (logDebug)
+            {
+                Debug.Log($"[SceneSync] Spawned {spawnedCount} remote players for scene {localScene}");
+            }
+        }
+
+        /// <summary>
+        /// Called when any player's scene changes. Spawns remote players who enter the same scene as local player.
+        /// </summary>
+        private void OnRemotePlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
+        {
+            // Skip local player - we only care about remote players joining our scene
+            if (SteamManager.Instance != null && steamId == SteamManager.Instance.PlayerSteamId)
+                return;
+
+            // Get local player's scene
+            var localState = PlayerStateManager.Instance?.GetPlayerState(SteamManager.Instance.PlayerSteamId);
+            if (localState == null) return;
+
+            NetworkSceneId localScene = localState.Scene;
+
+            // Only spawn if they're joining the same scene as us AND we're in a game scene
+            if (sceneId == localScene && localScene != NetworkSceneId.None && localScene != NetworkSceneId.Lobby)
+            {
+                // Get display name from lobby
+                string displayName = "Unknown";
+                foreach (var member in SteamManager.Instance.currentLobby.Members)
+                {
+                    if (member.Id == steamId)
+                    {
+                        displayName = member.Name;
+                        break;
+                    }
+                }
+
+                NetworkConnectionManager.Instance?.SpawnRemotePlayerFor(steamId, displayName);
+
+                if (logDebug)
+                {
+                    Debug.Log($"[SceneSync] Late spawn: {displayName} joined scene {sceneId}");
+                }
+            }
         }
 
         private string ResolveSceneName(NetworkSceneId sceneId)
         {
             switch (sceneId)
             {
-                case NetworkSceneId.Lobby: return lobbySceneName;
-                case NetworkSceneId.GroundControl: return groundControlSceneName;
-                case NetworkSceneId.SpaceStation: return spaceStationSceneName;
+                case NetworkSceneId.Lobby: return LobbySceneName;
+                case NetworkSceneId.GroundControl: return GroundControlSceneName;
+                case NetworkSceneId.SpaceStation: return SpaceStationSceneName;
                 default: return string.Empty;
             }
         }
@@ -209,6 +351,12 @@ namespace SatelliteGameJam.Networking.State
 
         private void SendSceneAck()
         {
+            if (SteamManager.Instance == null || NetworkConnectionManager.Instance == null)
+            {
+                if (logDebug) Debug.LogWarning("[SceneSync] Cannot send ack - manager not ready");
+                return;
+            }
+
             byte[] packet = new byte[11];
             packet[0] = (byte)NetworkMessageType.SceneChangeAcknowledge;
             int offset = 1;
@@ -218,6 +366,13 @@ namespace SatelliteGameJam.Networking.State
             packet[offset++] = (byte)(((ushort)sceneId) >> 8);
             packet[offset++] = (byte)(((ushort)sceneId) & 0xFF);
             NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
+            
+            if (logDebug) Debug.Log($"[SceneSync] Sent ack for scene {sceneId}");
+        }
+
+        public void AcknowledgeCurrentScene()
+        {
+            SendSceneAck();
         }
 
         private void OnReceiveSceneChangeRequest(SteamId sender, byte[] data)
@@ -233,9 +388,19 @@ namespace SatelliteGameJam.Networking.State
             ushort sceneIdValue = (ushort)((data[offset++] << 8) | data[offset++]);
             NetworkSceneId sceneId = (NetworkSceneId)sceneIdValue;
 
-            if (pendingAcks.Remove(who) && logDebug)
+            if (pendingAcks.Remove(who))
             {
-                Debug.Log($"[SceneSync] Ack from {who} for scene {sceneId}. Remaining: {pendingAcks.Count}");
+                if (logDebug)
+                {
+                    Debug.Log($"[SceneSync] Ack from {who} for scene {sceneId}. Remaining: {pendingAcks.Count}");
+                }
+                
+                // All acks received - cancel timeout
+                if (pendingAcks.Count == 0)
+                {
+                    CancelInvoke(nameof(CheckAckTimeout));
+                    if (logDebug) Debug.Log("[SceneSync] All players acknowledged scene change");
+                }
             }
         }
     }

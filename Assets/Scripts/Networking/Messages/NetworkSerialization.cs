@@ -31,6 +31,13 @@ namespace SatelliteGameJam.Networking.Messages
             offset += 4;
         }
 
+        public static void WriteUShort(byte[] buffer, ref int offset, ushort value)
+        {
+            EnsureWriteSpace(buffer, offset, 2, "ushort");
+            Buffer.BlockCopy(BitConverter.GetBytes(value), 0, buffer, offset, 2);
+            offset += 2;
+        }
+
         public static void WriteULong(byte[] buffer, ref int offset, ulong value)
         {
             EnsureWriteSpace(buffer, offset, 8, "ulong");
@@ -69,6 +76,14 @@ namespace SatelliteGameJam.Networking.Messages
             EnsureReadSpace(buffer, offset, 4, "uint");
             uint value = BitConverter.ToUInt32(buffer, offset);
             offset += 4;
+            return value;
+        }
+
+        public static ushort ReadUShort(byte[] buffer, ref int offset)
+        {
+            EnsureReadSpace(buffer, offset, 2, "ushort");
+            ushort value = BitConverter.ToUInt16(buffer, offset);
+            offset += 2;
             return value;
         }
 

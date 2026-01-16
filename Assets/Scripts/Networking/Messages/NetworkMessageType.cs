@@ -34,6 +34,11 @@ namespace SatelliteGameJam.Networking.Messages
     SatelliteHealth = 0x42,              // [Health(4)][DamageBits(4)]
     SatellitePartTransform = 0x43,       // [PartId(4)][Pos(12)][Rot(16)]
     ConsoleState = 0x44,                 // [ConsoleId(4)][StateByte(1)][Payload(N)]
+    ConsoleInteraction = 0x45,           // [SteamId(8)][AtConsole(1)]
+    
+    // Late-join synchronization (Channel 0 - Reliable)
+    StateSnapshotRequest = 0x50,         // [RequesterSteamId(8)]
+    StateSnapshotResponse = 0x51,        // [Health(4)][DamageBits(4)][ConsoleCount(2)][ConsoleData(N)][PlayerCount(1)][PlayerData(N)]
 }
 
 /// <summary>

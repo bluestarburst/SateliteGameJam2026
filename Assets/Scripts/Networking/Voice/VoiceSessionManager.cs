@@ -3,6 +3,8 @@ using Steamworks;
 using UnityEngine;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.State;
+using SatelliteGameJam.Networking.Core;
+using Steamworks.Data;
 
 namespace SatelliteGameJam.Networking.Voice
 {
@@ -33,6 +35,11 @@ namespace SatelliteGameJam.Networking.Voice
     // Local player state
     private bool isLocalPlayerAtConsole = false;
 
+    /// <summary>
+    /// Public accessor for console state (used by VoiceChatP2P for send gating).
+    /// </summary>
+    public bool IsLocalPlayerAtConsole => isLocalPlayerAtConsole;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -43,6 +50,13 @@ namespace SatelliteGameJam.Networking.Voice
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Register handler for console interaction broadcasts
+        if (NetworkConnectionManager.Instance != null)
+        {
+            NetworkConnectionManager.Instance.RegisterHandler(
+                NetworkMessageType.ConsoleInteraction, OnReceiveConsoleInteraction);
+        }
 
         // Subscribe to player state events
         if (PlayerStateManager.Instance != null)
@@ -111,6 +125,7 @@ namespace SatelliteGameJam.Networking.Voice
 
     /// <summary>
     /// Marks the local player as interacting with a console (for ground control voice gating).
+    /// Broadcasts this state to all peers.
     /// </summary>
     public void SetLocalPlayerAtConsole(bool atConsole)
     {
@@ -118,6 +133,47 @@ namespace SatelliteGameJam.Networking.Voice
         
         if (enableDebugLogs)
             Debug.Log($"[VoiceSessionManager] Local player at console: {atConsole}");
+        
+        // Broadcast console interaction state to all peers
+        BroadcastConsoleInteraction(atConsole);
+    }
+
+    /// <summary>
+    /// Broadcasts the local player's console interaction state to all peers.
+    /// </summary>
+    private void BroadcastConsoleInteraction(bool atConsole)
+    {
+        if (NetworkConnectionManager.Instance == null) return;
+
+        byte[] packet = new byte[10]; // 1 (type) + 8 (steamId) + 1 (atConsole)
+        int offset = 0;
+
+        packet[offset++] = (byte)NetworkMessageType.ConsoleInteraction;
+        NetworkSerialization.WriteULong(packet, ref offset, SteamManager.Instance.PlayerSteamId);
+        packet[offset++] = (byte)(atConsole ? 1 : 0);
+
+        // Send to all peers reliably
+        NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
+
+        if (enableDebugLogs)
+            Debug.Log($"[VoiceSessionManager] Broadcast console interaction: {atConsole}");
+    }
+
+    /// <summary>
+    /// Handles received console interaction state from remote players.
+    /// </summary>
+    private void OnReceiveConsoleInteraction(SteamId sender, byte[] data)
+    {
+        if (data == null || data.Length < 10) return;
+
+        int offset = 1; // Skip message type
+        SteamId playerSteamId = NetworkSerialization.ReadULong(data, ref offset);
+        bool atConsole = data[offset] == 1;
+
+        SetRemotePlayerAtConsole(playerSteamId, atConsole);
+
+        if (enableDebugLogs)
+            Debug.Log($"[VoiceSessionManager] Received console interaction from {playerSteamId}: {atConsole}");
     }
 
     /// <summary>
@@ -227,6 +283,14 @@ namespace SatelliteGameJam.Networking.Voice
 
         // Default: don't hear
         return false;
+    }
+
+    /// <summary>
+    /// Public method to check proximity for voice SENDING (used by VoiceChatP2P).
+    /// </summary>
+    public bool IsWithinProximityForSending(SteamId remoteSteamId)
+    {
+        return IsWithinProximity(remoteSteamId);
     }
 
     /// <summary>
