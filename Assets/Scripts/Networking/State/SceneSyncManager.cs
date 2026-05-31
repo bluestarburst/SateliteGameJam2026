@@ -248,6 +248,28 @@ namespace SatelliteGameJam.Networking.State
             bool isLobbyOrMatchmaking = sceneFlowController != null
                 ? sceneFlowController.IsLobbyOrMatchmakingScene(scene.name)
                 : scene.name == LobbySceneName || scene.name == "Matchmaking";
+            bool isLobbyScene = scene.name == LobbySceneName;
+
+            // Ensure lobby voice/chat routing has a deterministic baseline state, even when
+            // scene-local lobby manager wiring is missing or delayed.
+            if (isLobbyScene && PlayerStateManager.Instance != null && SteamManager.Instance != null)
+            {
+                SteamId localId = SteamManager.Instance.PlayerSteamId;
+                if (localId.Value != 0)
+                {
+                    PlayerState localState = PlayerStateManager.Instance.GetPlayerState(localId);
+
+                    if (localState.Scene != NetworkSceneId.Lobby)
+                    {
+                        PlayerStateManager.Instance.SetLocalPlayerScene(NetworkSceneId.Lobby);
+                    }
+
+                    if (localState.Role == PlayerRole.None)
+                    {
+                        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.Lobby);
+                    }
+                }
+            }
 
             if (NetworkConnectionManager.Instance != null && !isLobbyOrMatchmaking)
             {

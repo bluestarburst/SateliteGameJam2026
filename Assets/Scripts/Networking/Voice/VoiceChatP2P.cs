@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 using SatelliteGameJam.Networking.Core;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
+using UnityEngine.SceneManagement;
 
 namespace SatelliteGameJam.Networking.Voice
 {
@@ -114,7 +115,16 @@ namespace SatelliteGameJam.Networking.Voice
             if (alwaysRecord) return true;
 
             var localState = GetLocalPlayerState();
-            if (localState == null) return false;
+            if (localState == null)
+            {
+                return IsLobbySceneActive();
+            }
+
+            // If player-state sync is delayed in lobby, fall back to scene detection.
+            if (IsLobbySceneActive())
+            {
+                return true;
+            }
 
             // Lobby: Auto-voice (always recording, no PTT needed)
             if (localState.Scene == NetworkSceneId.Lobby)
@@ -145,7 +155,7 @@ namespace SatelliteGameJam.Networking.Voice
             if (SteamManager.Instance?.currentLobby == null) return;
 
             var localState = GetLocalPlayerState();
-            if (localState == null) return;
+            if (localState == null && !IsLobbySceneActive()) return;
 
             // Prepend local player SteamId to packet
             byte[] packet = new byte[8 + length];
@@ -159,7 +169,8 @@ namespace SatelliteGameJam.Networking.Voice
             {
                 if (member.Id == SteamManager.Instance.PlayerSteamId) continue;
 
-                if (ShouldSendVoiceTo(localState, member.Id))
+                bool shouldSend = IsLobbySceneActive() || (localState != null && ShouldSendVoiceTo(localState, member.Id));
+                if (shouldSend)
                 {
                     bool sent = SteamNetworking.SendP2PPacket(member.Id, packet, packet.Length, voiceChannel, P2PSend.UnreliableNoDelay);
                     if (!sent && debugLogging)
@@ -189,7 +200,7 @@ namespace SatelliteGameJam.Networking.Voice
             if (targetState == null) return false;
 
             // Lobby: Send to everyone (PTT already checked in ShouldRecordVoice)
-            if (localState.Scene == NetworkSceneId.Lobby)
+            if (localState.Scene == NetworkSceneId.Lobby || IsLobbySceneActive())
             {
                 return true;
             }
@@ -243,6 +254,17 @@ namespace SatelliteGameJam.Networking.Voice
             }
 
             return false;
+        }
+
+        private bool IsLobbySceneActive()
+        {
+            string sceneName = SceneManager.GetActiveScene().name;
+            if (SceneFlowController.Instance != null)
+            {
+                return SceneFlowController.Instance.IsLobbyOrMatchmakingScene(sceneName);
+            }
+
+            return sceneName == "Lobby";
         }
 
         /// <summary>
