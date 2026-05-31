@@ -61,12 +61,20 @@ namespace SatelliteGameJam.Networking.Voice
             VoiceAnchorRule rule = ResolveRule(localState.Scene, remoteState.Role, atConsole);
             if (rule == null)
             {
-                // Default behavior preserves existing positional audio behavior.
+                // Default behavior: follow avatar for in-world players; otherwise
+                // keep proxy playback non-spatial so lobby audio remains audible.
                 if (avatarFallback != null)
                 {
                     hostObject.transform.SetParent(avatarFallback.transform, false);
+                    hostObject.transform.localPosition = Vector3.zero;
+                    hostObject.transform.localRotation = Quaternion.identity;
+                    source.spatialBlend = 1f;
                 }
-                source.spatialBlend = 1f;
+                else
+                {
+                    hostObject.transform.SetParent(null, false);
+                    source.spatialBlend = 0f;
+                }
                 return;
             }
 

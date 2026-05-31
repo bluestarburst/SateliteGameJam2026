@@ -32,6 +32,7 @@ namespace SatelliteGameJam.Networking.State
         [SerializeField] private bool logDebug = true;
 
         private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
+        private bool handlersRegistered;
 
         // Properties for accessing configuration
         private string LobbySceneName => GetFallbackSceneName(NetworkSceneId.Lobby);
@@ -59,6 +60,11 @@ namespace SatelliteGameJam.Networking.State
 
         private void RegisterHandlers()
         {
+            if (handlersRegistered)
+            {
+                return;
+            }
+
             if (NetworkConnectionManager.Instance == null)
             {
                 Debug.LogWarning("[SceneSync] NetworkConnectionManager not found. Retrying...");
@@ -74,10 +80,16 @@ namespace SatelliteGameJam.Networking.State
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnRemotePlayerSceneChanged;
             }
+
+            handlersRegistered = true;
         }
 
         private void OnDestroy()
         {
+            CancelInvoke(nameof(RegisterHandlers));
+            CancelInvoke(nameof(CheckAckTimeout));
+            CancelInvoke(nameof(SpawnPlayersForCurrentScene));
+
             if (NetworkConnectionManager.Instance != null)
             {
                 NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
@@ -418,6 +430,14 @@ namespace SatelliteGameJam.Networking.State
             if (SteamManager.Instance == null || NetworkConnectionManager.Instance == null)
             {
                 if (logDebug) Debug.LogWarning("[SceneSync] Cannot send ack - manager not ready");
+                return;
+            }
+
+            if (SteamManager.Instance.currentLobby.Id.Value == 0)
+            {
+                if (logDebug) Debug.Log("[SceneSync] Deferring ack - no active lobby yet");
+                CancelInvoke(nameof(SendSceneAck));
+                Invoke(nameof(SendSceneAck), 0.5f);
                 return;
             }
 

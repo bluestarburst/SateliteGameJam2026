@@ -31,6 +31,7 @@ namespace SatelliteGameJam.Networking.Voice
         [SerializeField] private bool debugLogging = false;
 
         private MemoryStream voiceStream;
+        private float nextDebugStatusAt;
 
         public bool isTalking => SteamUser.HasVoiceData;
         public bool isRecording => SteamUser.VoiceRecord;
@@ -66,6 +67,17 @@ namespace SatelliteGameJam.Networking.Voice
             // Determine if we should be recording based on role
             bool shouldRecord = ShouldRecordVoice();
             SteamUser.VoiceRecord = shouldRecord;
+
+            if (debugLogging && Time.time >= nextDebugStatusAt)
+            {
+                var localState = GetLocalPlayerState();
+                int memberCount = SteamManager.Instance?.currentLobby.MemberCount ?? 0;
+                Debug.Log(
+                    $"[VoiceChatP2P] active={isLocalPlayerActive} members={memberCount} " +
+                    $"scene={localState?.Scene} role={localState?.Role} " +
+                    $"record={shouldRecord} hasVoice={SteamUser.HasVoiceData} sending={isSending}");
+                nextDebugStatusAt = Time.time + 2f;
+            }
 
             // If we have voice data, send it with role-aware routing
             if (SteamUser.HasVoiceData)

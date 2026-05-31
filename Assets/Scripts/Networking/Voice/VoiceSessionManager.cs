@@ -31,6 +31,7 @@ namespace SatelliteGameJam.Networking.Voice
         private readonly Dictionary<SteamId, VoiceBinding> bindings = new Dictionary<SteamId, VoiceBinding>();
 
         private bool isLocalPlayerAtConsole;
+        private bool consoleHandlerRegistered;
 
         public bool IsLocalPlayerAtConsole => isLocalPlayerAtConsole;
         private float SpaceProximityRadius => config != null ? config.proximityVoiceDistance : fallbackSpaceProximityRadius;
@@ -48,10 +49,7 @@ namespace SatelliteGameJam.Networking.Voice
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            if (NetworkConnectionManager.Instance != null)
-            {
-                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.ConsoleInteraction, OnReceiveConsoleInteraction);
-            }
+            RegisterConsoleHandlerWhenReady();
 
             if (PlayerStateManager.Instance != null)
             {
@@ -60,9 +58,28 @@ namespace SatelliteGameJam.Networking.Voice
             }
         }
 
+        private void RegisterConsoleHandlerWhenReady()
+        {
+            if (consoleHandlerRegistered)
+            {
+                return;
+            }
+
+            if (NetworkConnectionManager.Instance == null)
+            {
+                Invoke(nameof(RegisterConsoleHandlerWhenReady), 0.5f);
+                return;
+            }
+
+            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.ConsoleInteraction, OnReceiveConsoleInteraction);
+            consoleHandlerRegistered = true;
+        }
+
         private void OnDestroy()
         {
-            if (NetworkConnectionManager.Instance != null)
+            CancelInvoke(nameof(RegisterConsoleHandlerWhenReady));
+
+            if (NetworkConnectionManager.Instance != null && consoleHandlerRegistered)
             {
                 NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.ConsoleInteraction, OnReceiveConsoleInteraction);
             }
@@ -374,7 +391,30 @@ namespace SatelliteGameJam.Networking.Voice
                 return;
             }
 
-            SceneAudioAnchorManager.Instance?.ApplyAnchor(steamId, binding.VoicePlayer.gameObject, source, binding.Avatar, isLocalPlayerAtConsole);
+            if (SceneAudioAnchorManager.Instance != null)
+            {
+                SceneAudioAnchorManager.Instance.ApplyAnchor(
+                    steamId,
+                    binding.VoicePlayer.gameObject,
+                    source,
+                    binding.Avatar,
+                    isLocalPlayerAtConsole);
+                return;
+            }
+
+            // Safe fallback when no SceneAudioAnchorManager is present:
+            // proxy-only lobby players should be audible without requiring
+            // world-space avatar anchors.
+            if (binding.Avatar != null)
+            {
+                binding.VoicePlayer.transform.SetParent(binding.Avatar.transform, false);
+                source.spatialBlend = 1f;
+            }
+            else
+            {
+                binding.VoicePlayer.transform.SetParent(null, false);
+                source.spatialBlend = 0f;
+            }
         }
     }
 }

@@ -52,6 +52,12 @@ namespace SatelliteGameJam.SceneManagers
                 PlayerStateManager.Instance.OnPlayerLeft += OnRemotePlayerLeft;
             }
 
+            if (SteamManager.Instance != null)
+            {
+                SteamManager.Instance.RemotePlayerJoined += OnSteamRemotePlayerJoined;
+                SteamManager.Instance.RemotePlayerLeft += OnSteamRemotePlayerLeft;
+            }
+
             // Voice chat: everyone can hear everyone in lobby
             if (VoiceSessionManager.Instance != null)
             {
@@ -68,6 +74,12 @@ namespace SatelliteGameJam.SceneManagers
             {
                 PlayerStateManager.Instance.OnPlayerJoined -= OnRemotePlayerJoined;
                 PlayerStateManager.Instance.OnPlayerLeft -= OnRemotePlayerLeft;
+            }
+
+            if (SteamManager.Instance != null)
+            {
+                SteamManager.Instance.RemotePlayerJoined -= OnSteamRemotePlayerJoined;
+                SteamManager.Instance.RemotePlayerLeft -= OnSteamRemotePlayerLeft;
             }
 
             // Clean up spawned players
@@ -149,6 +161,16 @@ namespace SatelliteGameJam.SceneManagers
             }
         }
 
+        private void OnSteamRemotePlayerJoined(SteamId steamId, string displayName)
+        {
+            if (SteamManager.Instance == null || steamId == SteamManager.Instance.PlayerSteamId)
+            {
+                return;
+            }
+
+            CreateVoiceProxyForPlayer(steamId, string.IsNullOrWhiteSpace(displayName) ? steamId.ToString() : displayName);
+        }
+
         /// <summary>
         /// Called when a player leaves the lobby.
         /// </summary>
@@ -163,6 +185,11 @@ namespace SatelliteGameJam.SceneManagers
                 // Clean up voice proxy
                 VoiceSessionManager.Instance?.UnregisterRemotePlayer(steamId);
             }
+        }
+
+        private void OnSteamRemotePlayerLeft(SteamId steamId)
+        {
+            OnRemotePlayerLeft(steamId);
         }
 
         /// <summary>

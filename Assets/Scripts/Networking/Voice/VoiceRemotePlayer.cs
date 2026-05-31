@@ -43,7 +43,9 @@ namespace SatelliteGameJam.Networking.Voice
 
         audioSource.clip = AudioClip.Create($"Voice_{senderId}", optimalRate * 2, 1, optimalRate, true, OnAudioRead, null);
         audioSource.loop = true;
-        audioSource.spatialBlend = 1.0f; // 3D audio
+        // Start as non-spatial; SceneAudioAnchorManager / VoiceSessionManager
+        // can promote to 3D when an avatar anchor is available.
+        audioSource.spatialBlend = 0f;
         audioSource.Play();
     }
     

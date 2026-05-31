@@ -25,6 +25,7 @@ namespace SatelliteGameJam.Networking.State
     public event Action<SteamId> OnPlayerReady;
     public event Action<SteamId> OnPlayerJoined;
     public event Action<SteamId> OnPlayerLeft;
+    private bool handlersRegistered;
 
     private void Awake()
     {
@@ -43,6 +44,11 @@ namespace SatelliteGameJam.Networking.State
 
     private void RepeatUntilRegistered()
     {
+        if (handlersRegistered)
+        {
+            return;
+        }
+
         if (NetworkConnectionManager.Instance == null)
         {
             Debug.LogWarning("PlayerStateManager: NetworkConnectionManager not found. Retrying...");
@@ -53,6 +59,18 @@ namespace SatelliteGameJam.Networking.State
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerReady, OnReceivePlayerReady);
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.RoleAssign, OnReceiveRoleAssign);
         NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.PlayerSceneState, OnReceivePlayerSceneState);
+        handlersRegistered = true;
+    }
+
+    private void OnDestroy()
+    {
+        CancelInvoke(nameof(RepeatUntilRegistered));
+        if (NetworkConnectionManager.Instance != null && handlersRegistered)
+        {
+            NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.PlayerReady, OnReceivePlayerReady);
+            NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.RoleAssign, OnReceiveRoleAssign);
+            NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.PlayerSceneState, OnReceivePlayerSceneState);
+        }
     }
 
     /// <summary>

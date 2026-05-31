@@ -185,9 +185,9 @@ namespace SatelliteGameJam.Networking.Core
     public void SendToAll(byte[] data, int channel, P2PSend sendType)
     {
         // Send to all peers via SteamManager.Instance.currentLobby.Members
-        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.MemberCount == 0)
+        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
         {
-            Debug.LogWarning("Cannot send data - not connected to a lobby.");
+            Debug.LogWarning($"Cannot send data - not connected to a lobby. channel={channel} bytes={(data != null ? data.Length : 0)}");
             return;
         }
         foreach (var member in SteamManager.Instance.currentLobby.Members)
@@ -205,9 +205,9 @@ namespace SatelliteGameJam.Networking.Core
     public void SendTo(SteamId targetId, byte[] data, int channel, P2PSend sendType)
     {
         // Send to specific peer
-        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.MemberCount == 0)
+        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
         {
-            Debug.LogWarning("Cannot send data - not connected to a lobby.");
+            Debug.LogWarning($"Cannot send data - not connected to a lobby. target={targetId} channel={channel} bytes={(data != null ? data.Length : 0)}");
             return;
         }
         if (!SteamManager.Instance.currentLobby.Members.ToList().Any(m => m.Id == targetId))
