@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using SatelliteGameJam.Networking.Core;
 
 // Attach to a UI Button; calls SteamManager to create a lobby and loads a lobby scene
 public class CreateLobbyButton : MonoBehaviour
@@ -29,7 +30,11 @@ public class CreateLobbyButton : MonoBehaviour
             }
 
         // Route to lobby scene after creation
-        if (!string.IsNullOrEmpty(lobbySceneName))
+        if (SceneFlowController.Instance != null)
+        {
+            SceneFlowController.Instance.LoadLobbyScene();
+        }
+        else if (!string.IsNullOrEmpty(lobbySceneName))
         {
             SceneManager.LoadScene(lobbySceneName);
         }
@@ -50,7 +55,11 @@ public class CreateLobbyButton : MonoBehaviour
             return;
         }
 
-        if (!string.IsNullOrEmpty(lobbySceneName))
+        if (SceneFlowController.Instance != null)
+        {
+            SceneFlowController.Instance.LoadLobbyScene();
+        }
+        else if (!string.IsNullOrEmpty(lobbySceneName))
         {
             SceneManager.LoadScene(lobbySceneName);
         }

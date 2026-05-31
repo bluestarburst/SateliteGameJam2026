@@ -8,6 +8,9 @@ using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Identity;
 using SatelliteGameJam.Networking.Debugging;
 using SatelliteGameJam.Networking.Core.Abstractions;
+using SatelliteGameJam.Networking.Sync;
+using SatelliteGameJam.Networking.State;
+using SatelliteGameJam.Networking.Voice;
 
 namespace SatelliteGameJam.Networking.Core
 {
@@ -39,6 +42,7 @@ namespace SatelliteGameJam.Networking.Core
 
     [Header("Configuration")]
     [SerializeField] private NetworkingConfiguration config;
+    [SerializeField] private RoleVisualProfile roleVisualProfile;
 
     // Fallback settings if no config is assigned
     [Header("Fallback Settings (used if no config assigned)")]
@@ -283,6 +287,24 @@ namespace SatelliteGameJam.Networking.Core
             identity.SetNetworkId((uint)steamId.Value); // Use SteamId as network ID for simplicity
         }
 
+        // Keep remote player visuals configurable via profile (core + swappable visuals).
+        var composition = instance.GetComponent<PlayerAvatarComposition>();
+        if (composition == null)
+        {
+            composition = instance.AddComponent<PlayerAvatarComposition>();
+        }
+
+        var state = PlayerStateManager.Instance?.GetPlayerState(steamId);
+        NetworkSceneId playerScene = state?.Scene ?? NetworkSceneId.None;
+        PlayerRole playerRole = state?.Role ?? PlayerRole.None;
+        GameObject visualPrefab = roleVisualProfile != null ? roleVisualProfile.Resolve(playerRole, playerScene) : null;
+        if (visualPrefab != null)
+        {
+            composition.ApplyVisual(visualPrefab);
+        }
+
+        VoiceSessionManager.Instance?.RegisterRemotePlayerAvatar(steamId, instance);
+
         spawnedRemotePlayers[steamId] = instance;
         
         if (config != null && config.verboseLogging)
@@ -299,6 +321,7 @@ namespace SatelliteGameJam.Networking.Core
         if (spawnedRemotePlayers.TryGetValue(steamId, out var instance))
         {
             Debug.Log($"Despawning remote player for {steamId}");
+            VoiceSessionManager.Instance?.UnregisterRemotePlayer(steamId);
             if (instance != null)
             {
                 Destroy(instance);
@@ -318,6 +341,7 @@ namespace SatelliteGameJam.Networking.Core
         
         foreach (var kvp in spawnedRemotePlayers)
         {
+            VoiceSessionManager.Instance?.UnregisterRemotePlayer(kvp.Key);
             if (kvp.Value != null)
             {
                 Destroy(kvp.Value);

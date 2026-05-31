@@ -1,6 +1,7 @@
 using UnityEngine;
 
 using SatelliteGameJam.Networking.Voice;
+using SatelliteGameJam.Networking;
 
 public class TransmissionInteract : MonoBehaviour, IInteractable
 {
@@ -18,7 +19,14 @@ public class TransmissionInteract : MonoBehaviour, IInteractable
 
     public void Interact(GroundPlayerInteractor interactor) {
         answeringTransmission = !answeringTransmission;
-        VoiceSessionManager.Instance.SetLocalPlayerAtConsole(answeringTransmission);
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.SetConsoleInteraction(answeringTransmission);
+        }
+        else
+        {
+            VoiceSessionManager.Instance?.SetLocalPlayerAtConsole(answeringTransmission);
+        }
         if (answeringTransmission) {
             interactor.restrictMovementTo(transform.position, tetherDistance);
             cable.SetActive(true);

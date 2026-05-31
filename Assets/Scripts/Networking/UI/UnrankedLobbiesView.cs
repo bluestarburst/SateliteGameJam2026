@@ -3,6 +3,7 @@ using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
 using UnityEngine.UI;
+using SatelliteGameJam.Networking.Core;
 
 // Displays active unranked lobbies in a ScrollView and joins on click
 public class UnrankedLobbiesView : MonoBehaviour
@@ -118,7 +119,14 @@ public class UnrankedLobbiesView : MonoBehaviour
         Debug.Log($"Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}");
 
         // go to lobby scene
-        UnityEngine.SceneManagement.SceneManager.LoadScene(LobbyScene);
+        if (SceneFlowController.Instance != null)
+        {
+            SceneFlowController.Instance.LoadLobbyScene();
+        }
+        else
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene(LobbyScene);
+        }
     }
 
     private void ClearContent()

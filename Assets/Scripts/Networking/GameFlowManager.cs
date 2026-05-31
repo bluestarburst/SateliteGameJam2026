@@ -6,6 +6,7 @@ using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Voice;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Identity;
+using UnityEngine.SceneManagement;
 
 namespace SatelliteGameJam.Networking
 {
@@ -50,7 +51,20 @@ namespace SatelliteGameJam.Networking
             {
                 PlayerStateManager.Instance.OnPlayerJoined += (steamId) => OnRemotePlayerJoined?.Invoke(steamId);
                 PlayerStateManager.Instance.OnPlayerLeft += (steamId) => OnRemotePlayerLeft?.Invoke(steamId);
+                PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
             }
+
+            SceneManager.sceneLoaded += HandleSceneLoaded;
+        }
+
+        private void OnDestroy()
+        {
+            if (PlayerStateManager.Instance != null)
+            {
+                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
+            }
+
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
         }
 
         // ===== LOBBY PHASE =====
@@ -450,6 +464,30 @@ namespace SatelliteGameJam.Networking
                 players.Add(member.Id);
             }
             return players.ToArray();
+        }
+
+        private void OnPlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
+        {
+            if (SteamManager.Instance == null || steamId != SteamManager.Instance.PlayerSteamId)
+            {
+                return;
+            }
+
+            OnSceneLoading?.Invoke(sceneId);
+        }
+
+        private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            SceneFlowController flow = SceneFlowController.Instance;
+            if (flow == null)
+            {
+                return;
+            }
+
+            if (flow.Definition != null && flow.Definition.TryGetSceneEntryByName(scene.name, out FlowSceneEntry entry))
+            {
+                OnSceneLoaded?.Invoke(entry.sceneId);
+            }
         }
     }
 }

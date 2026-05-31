@@ -20,6 +20,7 @@ namespace SatelliteGameJam.Networking.State
 
         [Header("Configuration")]
         [SerializeField] private NetworkingConfiguration config;
+        [SerializeField] private SceneFlowController sceneFlowController;
 
         [Header("Fallback Scene Names (if no config assigned)")]
         [SerializeField] private string lobbySceneName = "Lobby";
@@ -33,9 +34,9 @@ namespace SatelliteGameJam.Networking.State
         private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
 
         // Properties for accessing configuration
-        private string LobbySceneName => config != null ? config.lobbySceneName : lobbySceneName;
-        private string GroundControlSceneName => config != null ? config.groundControlSceneName : groundControlSceneName;
-        private string SpaceStationSceneName => config != null ? config.spaceStationSceneName : spaceStationSceneName;
+        private string LobbySceneName => GetFallbackSceneName(NetworkSceneId.Lobby);
+        private string GroundControlSceneName => GetFallbackSceneName(NetworkSceneId.GroundControl);
+        private string SpaceStationSceneName => GetFallbackSceneName(NetworkSceneId.SpaceStation);
         private float SceneChangeTimeout => config != null ? config.sceneChangeTimeoutSeconds : sceneChangeTimeoutSeconds;
 
         private void Awake()
@@ -47,6 +48,10 @@ namespace SatelliteGameJam.Networking.State
             }
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            if (sceneFlowController == null)
+            {
+                sceneFlowController = SceneFlowController.Instance;
+            }
 
             RegisterHandlers();
             SceneManager.sceneLoaded += OnSceneLoaded;
@@ -96,6 +101,13 @@ namespace SatelliteGameJam.Networking.State
                 if (logDebug) Debug.Log("[SceneSync] Not lobby owner; cannot start game.");
                 return;
             }
+
+            if (sceneFlowController != null && !sceneFlowController.CanHostStartGame(out string reason))
+            {
+                Debug.LogWarning($"[SceneSync] Cannot start game: {reason}");
+                return;
+            }
+
             BroadcastRoleBasedScenes();
             BeginAckWindow();
         }
@@ -130,9 +142,7 @@ namespace SatelliteGameJam.Networking.State
             foreach (var member in members)
             {
                 var state = PlayerStateManager.Instance.GetPlayerState(member.Id);
-                NetworkSceneId target = state.Role == PlayerRole.SpaceStation
-                    ? NetworkSceneId.SpaceStation
-                    : NetworkSceneId.GroundControl;
+                NetworkSceneId target = ResolveGameplaySceneForRole(state.Role);
 
                 if (member.Id == SteamManager.Instance.PlayerSteamId)
                 {
@@ -208,7 +218,14 @@ namespace SatelliteGameJam.Networking.State
             }
 
             if (logDebug) Debug.Log($"[SceneSync] Loading scene '{sceneName}' for local player");
-            SceneManager.LoadScene(sceneName);
+            if (sceneFlowController != null)
+            {
+                sceneFlowController.LoadSceneForLocal(sceneId);
+            }
+            else
+            {
+                SceneManager.LoadScene(sceneName);
+            }
         }
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -216,7 +233,9 @@ namespace SatelliteGameJam.Networking.State
             // CRITICAL FIX: Only clean up remote player prefabs when NOT in Lobby/Matchmaking
             // Lobby uses voice proxies managed by LobbyNetworkingManager
             // Cleaning up on entry to Lobby would destroy those voice proxies immediately after creation
-            bool isLobbyOrMatchmaking = scene.name == LobbySceneName || scene.name == "Matchmaking";
+            bool isLobbyOrMatchmaking = sceneFlowController != null
+                ? sceneFlowController.IsLobbyOrMatchmakingScene(scene.name)
+                : scene.name == LobbySceneName || scene.name == "Matchmaking";
 
             if (NetworkConnectionManager.Instance != null && !isLobbyOrMatchmaking)
             {
@@ -325,11 +344,56 @@ namespace SatelliteGameJam.Networking.State
 
         private string ResolveSceneName(NetworkSceneId sceneId)
         {
+            if (sceneFlowController != null)
+            {
+                string mapped = sceneFlowController.ResolveSceneName(sceneId);
+                if (!string.IsNullOrWhiteSpace(mapped))
+                {
+                    return mapped;
+                }
+            }
+
             switch (sceneId)
             {
                 case NetworkSceneId.Lobby: return LobbySceneName;
                 case NetworkSceneId.GroundControl: return GroundControlSceneName;
                 case NetworkSceneId.SpaceStation: return SpaceStationSceneName;
+                default: return string.Empty;
+            }
+        }
+
+        private NetworkSceneId ResolveGameplaySceneForRole(PlayerRole role)
+        {
+            if (sceneFlowController != null)
+            {
+                return sceneFlowController.ResolveGameplaySceneForRole(role);
+            }
+
+            return role == PlayerRole.SpaceStation
+                ? NetworkSceneId.SpaceStation
+                : NetworkSceneId.GroundControl;
+        }
+
+        private string GetFallbackSceneName(NetworkSceneId sceneId)
+        {
+            if (config != null)
+            {
+                switch (sceneId)
+                {
+                    case NetworkSceneId.Lobby:
+                        return config.lobbySceneName;
+                    case NetworkSceneId.GroundControl:
+                        return config.groundControlSceneName;
+                    case NetworkSceneId.SpaceStation:
+                        return config.spaceStationSceneName;
+                }
+            }
+
+            switch (sceneId)
+            {
+                case NetworkSceneId.Lobby: return lobbySceneName;
+                case NetworkSceneId.GroundControl: return groundControlSceneName;
+                case NetworkSceneId.SpaceStation: return spaceStationSceneName;
                 default: return string.Empty;
             }
         }
@@ -377,7 +441,27 @@ namespace SatelliteGameJam.Networking.State
 
         private void OnReceiveSceneChangeRequest(SteamId sender, byte[] data)
         {
-            if (logDebug) Debug.Log($"[SceneSync] Received SceneChangeRequest from {sender}");
+            if (data == null || data.Length < 15 || PlayerStateManager.Instance == null || SteamManager.Instance == null)
+            {
+                return;
+            }
+
+            int offset = 1;
+            SteamId targetPlayer = NetworkSerialization.ReadULong(data, ref offset);
+            ushort sceneValue = (ushort)((data[offset++] << 8) | data[offset++]);
+            NetworkSceneId targetScene = (NetworkSceneId)sceneValue;
+
+            if (targetPlayer != SteamManager.Instance.PlayerSteamId)
+            {
+                return;
+            }
+
+            if (logDebug)
+            {
+                Debug.Log($"[SceneSync] Received direct scene change request from {sender} for {targetScene}");
+            }
+
+            PlayerStateManager.Instance.SetLocalPlayerScene(targetScene);
         }
 
         private void OnReceiveSceneChangeAcknowledge(SteamId sender, byte[] data)

@@ -27,6 +27,15 @@ public class SteamManager : MonoBehaviour
     [Tooltip("Optional scene to load when a lobby is ready.")]
     [SerializeField] private string gameSceneName = string.Empty;
     [SerializeField] private bool autoCreateLobbyForTesting = false;
+    [SerializeField] private GameFlowDefinition gameFlowDefinition;
+
+    [Header("Dev Startup")]
+    [SerializeField] private bool enableDevStartupProfile = false;
+    [SerializeField] private DevStartupMode devStartupMode = DevStartupMode.Normal;
+    [SerializeField] private PlayerRole forcedLocalRole = PlayerRole.None;
+    [SerializeField] private bool autoStartWhenMinimumPeers = false;
+    [SerializeField] private int minimumPeersToAutoStart = 2;
+    [SerializeField] private ulong autoJoinLobbyId;
     
     private int playerElo = 0;
 
@@ -165,6 +174,8 @@ public class SteamManager : MonoBehaviour
         {
             CreateLobby(0);
         }
+
+        RunDevStartupProfile();
     }
 
     private void Update()
@@ -257,10 +268,7 @@ public class SteamManager : MonoBehaviour
     private void OnLobbyGameCreatedCallback(Lobby lobby, uint ip, ushort port, SteamId steamId)
     {
         SyncRemoteMembersWithLobby(lobby);
-        if (!string.IsNullOrEmpty(gameSceneName))
-        {
-            SceneManager.LoadScene(gameSceneName);
-        }
+        RouteToLobbyScene();
     }
 
     private void AcceptP2P(SteamId opponentId)
@@ -294,7 +302,7 @@ public class SteamManager : MonoBehaviour
 
         if (lobby.MemberCount != 1 && !string.IsNullOrEmpty(gameSceneName))
         {
-            SceneManager.LoadScene(gameSceneName);
+            RouteToLobbyScene();
         }
     }
 
@@ -324,10 +332,7 @@ public class SteamManager : MonoBehaviour
 
         currentLobby = joinedLobby;
         SyncRemoteMembersWithLobby(joinedLobby);
-        if (!string.IsNullOrEmpty(gameSceneName))
-        {
-            SceneManager.LoadScene(gameSceneName);
-        }
+        RouteToLobbyScene();
     }
 
     private void OnLobbyCreatedCallback(Result result, Lobby lobby)
@@ -349,6 +354,14 @@ public class SteamManager : MonoBehaviour
         }
 
         AddRemoteMember(friend);
+
+        if (autoStartWhenMinimumPeers &&
+            currentLobby.Id.Value != 0 &&
+            currentLobby.IsOwnedBy(PlayerSteamId) &&
+            currentLobby.MemberCount >= minimumPeersToAutoStart)
+        {
+            SceneSyncManager.Instance?.RequestStartGame();
+        }
     }
 
     private void OnDlcInstalledCallback(AppId appId)
@@ -527,7 +540,6 @@ public class SteamManager : MonoBehaviour
         AcceptP2P(friend.Id);
 
         RemotePlayerJoined?.Invoke(friend.Id, friend.Name);
-        TryAutoSpawnRemotePlayer(friend.Id, friend.Name);
     }
 
     private void RemoveRemoteMember(SteamId steamId)
@@ -551,33 +563,74 @@ public class SteamManager : MonoBehaviour
         }
     }
 
-    private void TryAutoSpawnRemotePlayer(SteamId steamId, string displayName)
+    private void RouteToLobbyScene()
     {
-        if (NetworkConnectionManager.Instance == null) return;
-
-        // CRITICAL: Don't spawn remote player prefabs in the Lobby or Matchmaking scenes
-        // Lobby uses lightweight voice proxies only, managed by LobbyNetworkingManager
-        // Matchmaking scene doesn't need remote player prefabs at all
-        // Check both: local player's state AND current scene name (scene name is more reliable during transitions)
-        string currentSceneName = SceneManager.GetActiveScene().name;
-        bool isLobbyOrMatchmaking = currentSceneName == "Lobby" || currentSceneName == "Matchmaking";
-
-        // Also check PlayerStateManager as a secondary check
-        var localState = PlayerStateManager.Instance?.GetPlayerState(PlayerSteamId);
-        if (localState != null && localState.Scene == NetworkSceneId.Lobby)
+        if (SceneFlowController.Instance != null && SceneFlowController.Instance.LoadLobbyScene())
         {
-            isLobbyOrMatchmaking = true;
-        }
-
-        if (isLobbyOrMatchmaking)
-        {
-            // Don't spawn - LobbyNetworkingManager will handle voice proxies in Lobby
-            Debug.Log($"[SteamManager] Skipping remote player spawn for {displayName} in {currentSceneName} scene");
             return;
         }
 
-        Debug.Log($"Attempting to spawn remote player for {steamId} ({displayName})");
-        NetworkConnectionManager.Instance.SpawnRemotePlayerFor(steamId, displayName);
+        if (!string.IsNullOrEmpty(gameSceneName))
+        {
+            SceneManager.LoadScene(gameSceneName);
+        }
+    }
+
+    private async void RunDevStartupProfile()
+    {
+#if !(UNITY_EDITOR || DEVELOPMENT_BUILD)
+        return;
+#else
+        if (!enableDevStartupProfile)
+        {
+            if (gameFlowDefinition == null)
+            {
+                return;
+            }
+
+            if (!gameFlowDefinition.DevStartup.enabled)
+            {
+                return;
+            }
+        }
+
+        DevStartupProfile profile = gameFlowDefinition != null ? gameFlowDefinition.DevStartup : null;
+        DevStartupMode mode = enableDevStartupProfile ? devStartupMode : (profile != null ? profile.mode : DevStartupMode.Normal);
+        PlayerRole roleOverride = enableDevStartupProfile ? forcedLocalRole : (profile != null ? profile.forcedRole : PlayerRole.None);
+        ulong lobbyId = enableDevStartupProfile ? autoJoinLobbyId : (profile != null ? profile.autoJoinLobbyId : 0UL);
+
+        if (roleOverride != PlayerRole.None && PlayerStateManager.Instance != null)
+        {
+            PlayerStateManager.Instance.SetLocalPlayerRole(roleOverride);
+        }
+
+        switch (mode)
+        {
+            case DevStartupMode.AutoCreateLobby:
+                await CreateLobby(0);
+                RouteToLobbyScene();
+                break;
+            case DevStartupMode.AutoJoinByCode:
+                Debug.LogWarning($"[SteamManager] AutoJoinByCode is not yet implemented for lobby id {lobbyId}.");
+                break;
+            case DevStartupMode.SkipToLobby:
+                RouteToLobbyScene();
+                break;
+            case DevStartupMode.SkipToGameplay:
+            {
+                if (SceneFlowController.Instance != null)
+                {
+                    NetworkSceneId target = SceneFlowController.Instance.ResolveGameplaySceneForRole(
+                        roleOverride == PlayerRole.None ? PlayerRole.GroundControl : roleOverride);
+                    SceneFlowController.Instance.LoadSceneForLocal(target);
+                }
+                break;
+            }
+            case DevStartupMode.Normal:
+            default:
+                break;
+        }
+#endif
     }
 
     private void TryDespawnRemotePlayer(SteamId steamId)

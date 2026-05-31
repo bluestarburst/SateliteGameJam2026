@@ -6,6 +6,7 @@ using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
 using System.Collections.Generic;
 using System.Linq;
+using SatelliteGameJam.Networking.Core;
 
 // Displays members of the current lobby in a ScrollView
 public class LobbyPlayersView : MonoBehaviour
@@ -77,6 +78,13 @@ public class LobbyPlayersView : MonoBehaviour
         if (debugMode)
         {
             startButton.SetActive(true);
+            return;
+        }
+
+        if (SceneFlowController.Instance != null &&
+            !SceneFlowController.Instance.CanHostStartGame(out _))
+        {
+            startButton.SetActive(false);
             return;
         }
 

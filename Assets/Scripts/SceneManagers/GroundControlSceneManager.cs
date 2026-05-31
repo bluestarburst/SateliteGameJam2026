@@ -22,7 +22,6 @@ namespace SatelliteGameJam.SceneManagers
         [SerializeField] private bool logDebug = false;
 
         private NetworkingConfiguration config;
-        private HashSet<SteamId> spawnedRemotePlayers = new HashSet<SteamId>();
 
         private void Start()
         {
@@ -34,17 +33,11 @@ namespace SatelliteGameJam.SceneManagers
                 PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
                 PlayerStateManager.Instance.SetLocalPlayerScene(NetworkSceneId.GroundControl);
 
-                // Subscribe to scene changes so we can spawn late-arriving players
-                PlayerStateManager.Instance.OnPlayerSceneChanged += OnRemotePlayerSceneChanged;
-
                 if (logDebug || (config != null && config.verboseLogging))
                 {
                     Debug.Log("[GroundControl] Set local player to Ground Control scene/role");
                 }
             }
-
-            // Spawn Ground Control players only (delayed slightly to allow network messages to arrive)
-            Invoke(nameof(SpawnGroundControlPlayers), 0.1f);
 
             // Set initial voice gating (not at console by default)
             UpdateVoiceGating();
@@ -63,7 +56,7 @@ namespace SatelliteGameJam.SceneManagers
         {
             if (PlayerStateManager.Instance != null)
             {
-                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnRemotePlayerSceneChanged;
+                // SceneSyncManager now owns remote spawn lifecycle.
             }
 
             if (SatelliteStateManager.Instance != null)
@@ -75,105 +68,7 @@ namespace SatelliteGameJam.SceneManagers
             }
         }
 
-        /// <summary>
-        /// Called when any player's scene changes. Spawns remote players who enter GroundControl.
-        /// </summary>
-        private void OnRemotePlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
-        {
-            // Skip local player
-            if (SteamManager.Instance != null && steamId == SteamManager.Instance.PlayerSteamId)
-                return;
-
-            if (sceneId == NetworkSceneId.GroundControl)
-            {
-                // Player has entered Ground Control scene - spawn them if not already spawned
-                TrySpawnRemotePlayer(steamId);
-            }
-        }
-
-        /// <summary>
-        /// Spawns remote player models for other Ground Control players only.
-        /// Refs: DeveloperExperienceImprovements.md Part 2
-        /// </summary>
-        private void SpawnGroundControlPlayers()
-        {
-            if (SteamManager.Instance == null || PlayerStateManager.Instance == null)
-            {
-                if (logDebug) Debug.LogWarning("[GroundControl] Cannot spawn players - managers not ready");
-                return;
-            }
-
-            if (config == null || !config.autoSpawnPlayers)
-            {
-                if (logDebug) Debug.Log("[GroundControl] Auto-spawn disabled in config");
-                return;
-            }
-
-            int spawnedCount = 0;
-            foreach (var member in SteamManager.Instance.currentLobby.Members)
-            {
-                if (member.Id == SteamManager.Instance.PlayerSteamId) continue;
-
-                var playerState = PlayerStateManager.Instance.GetPlayerState(member.Id);
-
-                // Only spawn players who are also in Ground Control scene
-                // Also spawn players with GroundControl role if their scene state hasn't arrived yet
-                bool shouldSpawn = playerState.Scene == NetworkSceneId.GroundControl ||
-                                   (playerState.Scene == NetworkSceneId.None && playerState.Role == PlayerRole.GroundControl);
-
-                if (shouldSpawn && TrySpawnRemotePlayer(member.Id))
-                {
-                    spawnedCount++;
-                }
-            }
-
-            if (logDebug || (config != null && config.verboseLogging))
-            {
-                Debug.Log($"[GroundControl] Spawned {spawnedCount} remote Ground Control players");
-            }
-        }
-
-        /// <summary>
-        /// Attempts to spawn a remote player if not already spawned.
-        /// </summary>
-        private bool TrySpawnRemotePlayer(SteamId steamId)
-        {
-            if (spawnedRemotePlayers.Contains(steamId))
-            {
-                if (logDebug) Debug.Log($"[GroundControl] Player {steamId} already spawned, skipping");
-                return false;
-            }
-
-            if (NetworkConnectionManager.Instance == null)
-            {
-                if (logDebug) Debug.LogWarning("[GroundControl] NetworkConnectionManager not available");
-                return false;
-            }
-
-            // Get display name from lobby members
-            string displayName = "Unknown";
-            if (SteamManager.Instance != null)
-            {
-                foreach (var member in SteamManager.Instance.currentLobby.Members)
-                {
-                    if (member.Id == steamId)
-                    {
-                        displayName = member.Name;
-                        break;
-                    }
-                }
-            }
-
-            NetworkConnectionManager.Instance.SpawnRemotePlayerFor(steamId, displayName);
-            spawnedRemotePlayers.Add(steamId);
-
-            if (logDebug || (config != null && config.verboseLogging))
-            {
-                Debug.Log($"[GroundControl] Spawned remote player: {displayName} ({steamId})");
-            }
-
-            return true;
-        }
+        // SceneSyncManager is the single authority for remote spawn/despawn.
 
         /// <summary>
         /// Updates voice gating based on console interaction state.

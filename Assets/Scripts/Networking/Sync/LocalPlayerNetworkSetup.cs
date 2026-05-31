@@ -76,6 +76,18 @@ namespace SatelliteGameJam.Networking.Sync
             networkIdentity.SetNetworkId((uint)localSteamId.Value);
             networkIdentity.SetOwner(localSteamId);
 
+            // Keep local player architecture aligned with remote player composition.
+            if (GetComponent<PlayerAvatarComposition>() == null)
+            {
+                gameObject.AddComponent<PlayerAvatarComposition>();
+            }
+
+            // Ensure transform sync exists so local player can publish movement.
+            if (GetComponent<NetworkTransformSync>() == null)
+            {
+                gameObject.AddComponent<NetworkTransformSync>();
+            }
+
             isSetup = true;
 
             if (logDebug)

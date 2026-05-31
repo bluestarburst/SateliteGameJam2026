@@ -1,0 +1,60 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8dd2476fcb5254d0fba33bf368870595, type: 3}
+  m_Name: GameFlowDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.GameFlowDefinition
+  scenes:
+  - sceneId: 1
+    sceneName: Lobby
+    modeType: 2
+    allowedRoles: 
+    onWillEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onDidEnter:
+      m_PersistentCalls:
+        m_Calls: []
+  - sceneId: 2
+    sceneName: BaseStation
+    modeType: 3
+    allowedRoles: 
+    onWillEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onDidEnter:
+      m_PersistentCalls:
+        m_Calls: []
+  - sceneId: 3
+    sceneName: Matchmaking
+    modeType: 3
+    allowedRoles: 
+    onWillEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onDidEnter:
+      m_PersistentCalls:
+        m_Calls: []
+  roleSceneRules:
+  - role: 2
+    targetScene: 2
+  - role: 3
+    targetScene: 3
+  matchmakingScene: 0
+  lobbyScene: 1
+  devStartup:
+    enabled: 0
+    mode: 0
+    forcedRole: 0
+    autoStartWhenMinimumPeers: 0
+    minimumPeers: 2
+    gameplayOverrideScene: 0
+    autoJoinLobbyId: 0

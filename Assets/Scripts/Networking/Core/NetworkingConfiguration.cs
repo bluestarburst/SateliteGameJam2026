@@ -39,6 +39,9 @@ namespace SatelliteGameJam.Networking.Core
         public bool cleanupPlayersOnSceneChange = true;
 
         [Header("Scene Management")]
+        [Tooltip("Optional global game flow definition. When assigned, scene routing should resolve through this asset first.")]
+        public GameFlowDefinition gameFlowDefinition;
+
         [Tooltip("Name of the lobby scene")]
         public string lobbySceneName = "Lobby";
         
@@ -171,6 +174,15 @@ namespace SatelliteGameJam.Networking.Core
         /// </summary>
         public string GetSceneName(Messages.NetworkSceneId sceneId)
         {
+            if (gameFlowDefinition != null)
+            {
+                string mappedScene = gameFlowDefinition.ResolveSceneName(sceneId);
+                if (!string.IsNullOrWhiteSpace(mappedScene))
+                {
+                    return mappedScene;
+                }
+            }
+
             switch (sceneId)
             {
                 case Messages.NetworkSceneId.Lobby: return lobbySceneName;
@@ -204,6 +216,8 @@ namespace SatelliteGameJam.Networking.Core
             {
                 Debug.LogWarning("[NetworkingConfiguration] spaceStationSceneName is not set!");
             }
+
+            gameFlowDefinition?.Validate();
 
             if (channelsToPoll == null || channelsToPoll.Length == 0)
             {

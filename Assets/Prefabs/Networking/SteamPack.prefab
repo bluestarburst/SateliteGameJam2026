@@ -18,6 +18,8 @@ GameObject:
   - component: {fileID: -8296308176359235256}
   - component: {fileID: 9208811232495926739}
   - component: {fileID: 9121032266710553835}
+  - component: {fileID: 5470187381370489128}
+  - component: {fileID: -8496834423698641048}
   m_Layer: 0
   m_Name: SteamPack
   m_TagString: Untagged
@@ -55,6 +57,13 @@ MonoBehaviour:
   gameAppId: 480
   gameSceneName: Lobby
   autoCreateLobbyForTesting: 0
+  gameFlowDefinition: {fileID: 11400000, guid: c1d5436cbfac14cfb80f75fffe7826dd, type: 2}
+  enableDevStartupProfile: 0
+  devStartupMode: 0
+  forcedLocalRole: 0
+  autoStartWhenMinimumPeers: 0
+  minimumPeersToAutoStart: 2
+  autoJoinLobbyId: 0
 --- !u!114 &7202338266808824058
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -68,6 +77,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkConnectionManager
   config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
+  roleVisualProfile: {fileID: 11400000, guid: e7df7426f428142c19b070d477b20e40, type: 2}
   channelsToPoll: 00000000010000000300000004000000
   autoSpawnPlayer: 1
   playerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
@@ -109,6 +119,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.SceneSyncManager
   config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
+  sceneFlowController: {fileID: 5470187381370489128}
   lobbySceneName: Lobby
   groundControlSceneName: BaseStation
   spaceStationSceneName: Satellite
@@ -126,9 +137,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 04ca81f132f751349877925a11995836, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.VoiceSessionManager
-  spaceProximityRadius: 20
+  config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
+  fallbackSpaceProximityRadius: 20
   enableDebugLogs: 0
-  LobbyScene: Lobby
 --- !u!114 &-8296308176359235256
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -136,7 +147,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2231938572761584968}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3d57f717f696d40ccaa3eb1a67874e5b, type: 3}
   m_Name: 
@@ -169,8 +180,67 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1d3befe8d2604418caa9c3a44b7aba6d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.VoiceChatP2P
+  config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
   crossRolePTTKey: 16
   alwaysRecord: 0
   voiceChannel: 2
   debugLogging: 0
   isSending: 0
+--- !u!114 &5470187381370489128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dd7924351eac7438d8cf103040cbc0b3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.SceneFlowController
+  gameFlowDefinition: {fileID: 11400000, guid: c1d5436cbfac14cfb80f75fffe7826dd, type: 2}
+  networkingConfiguration: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
+  fallbackMatchmakingSceneName: Matchmaking
+  fallbackLobbySceneName: Lobby
+  fallbackGroundSceneName: GroundControl
+  fallbackSpaceSceneName: SpaceStation
+  verboseLogging: 1
+--- !u!114 &-8496834423698641048
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 716b822329f0b457b9a5bac6e19b6a3d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.SceneAudioAnchorManager
+  rules:
+  - localScene: 1
+    remoteRole: 0
+    anchorMode: 2
+    anchorObjectName: 
+    spatialBlend: 0
+  - localScene: 2
+    remoteRole: 2
+    anchorMode: 0
+    anchorObjectName: 
+    spatialBlend: 0
+  - localScene: 3
+    remoteRole: 3
+    anchorMode: 0
+    anchorObjectName: 
+    spatialBlend: 0
+  - localScene: 3
+    remoteRole: 2
+    anchorMode: 0
+    anchorObjectName: 
+    spatialBlend: 0
+  - localScene: 2
+    remoteRole: 3
+    anchorMode: 0
+    anchorObjectName: 
+    spatialBlend: 0
+  verboseLogging: 1
