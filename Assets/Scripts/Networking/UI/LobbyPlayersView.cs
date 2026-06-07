@@ -67,9 +67,17 @@ public class LobbyPlayersView : MonoBehaviour
         SteamMatchmaking.OnLobbyMemberDisconnected -= OnLobbyMemberChanged;
     }
 
+    private void OnDestroy()
+    {
+        if (PlayerStateManager.Instance != null)
+        {
+            PlayerStateManager.Instance.OnRoleChanged -= OnPlayerRoleChanged;
+        }
+    }
+
     private void CanStartGame()
     {
-        if (SteamManager.Instance == null || !SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
+        if (SteamManager.Instance == null || !SteamManager.Instance.IsLocalPlayerLobbyHost)
         {
             startButton.SetActive(false);
             return;
@@ -205,6 +213,12 @@ public class LobbyPlayersView : MonoBehaviour
     {
         if (playerItems.TryGetValue(steamId, out var item))
         {
+            if (item == null)
+            {
+                playerItems.Remove(steamId);
+                return;
+            }
+
             var text = item.GetComponent<TMP_Text>();
             if (text != null)
             {
@@ -256,7 +270,7 @@ public class LobbyPlayersView : MonoBehaviour
             return;
         }
 
-        if (!SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
+        if (!SteamManager.Instance.IsLocalPlayerLobbyHost)
         {
             Debug.LogWarning("Cannot start game - you are not the lobby owner.");
             return;

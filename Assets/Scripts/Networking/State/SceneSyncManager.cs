@@ -140,10 +140,7 @@ namespace SatelliteGameJam.Networking.State
 
         private bool IsOwner()
         {
-            if (SteamManager.Instance == null) return false;
-            var lobby = SteamManager.Instance.currentLobby;
-            if (lobby.Id.Value == 0) return false;
-            return lobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId);
+            return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
         }
 
         private void BroadcastRoleBasedScenes()

@@ -2,13 +2,24 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 interface IInteractable {
-    public void Interact(GroundPlayerInteractor interactor);
-    public void OnScroll(GroundPlayerInteractor interactor, float vertical);
+    public void Interact(GroundPlayerInteractor interactor)
+    {
+        return;
+    }
+    public void OnScroll(GroundPlayerInteractor interactor, float vertical)
+    {
+        return;
+    }
+    public void Escape(GroundPlayerInteractor interactor)
+    {
+        return;
+    }
 }
 
 public class GroundPlayerInteractor : MonoBehaviour
 {
     public InputActionReference InteractAction;
+    public InputActionReference EscapeAction;
     public InputActionReference ScrollAction;
     public Transform InteractorSource;
     public float InteractRange;
@@ -29,6 +40,16 @@ public class GroundPlayerInteractor : MonoBehaviour
             if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
                 if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
                     interactObj.Interact(this);
+                }
+            }
+        }
+
+        if (EscapeAction.action.WasPressedThisFrame()) {
+            // Debug.Log("Interact button pressed");
+            Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
+            if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
+                if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
+                    interactObj.Escape(this);
                 }
             }
         }
@@ -56,5 +77,13 @@ public class GroundPlayerInteractor : MonoBehaviour
     public void releaseMovement()
     {
         movement.untether();
+    }
+
+    public void lockPlayer() {
+        movement.lockPlayer();
+    }
+
+    public void unlockPlayer() {
+        movement.unlockPlayer();
     }
 }

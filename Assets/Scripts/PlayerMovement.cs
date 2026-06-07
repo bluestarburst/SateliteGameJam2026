@@ -51,7 +51,7 @@ public class Example : MonoBehaviour
 
         transform.Rotate(mouseInput * sensitivity);
         Vector3 eulerRotation = transform.rotation.eulerAngles;
-        transform.rotation = Quaternion.Euler(eulerRotation.x, eulerRotation.y, 0);
+        Camera.main.transform.rotation = Quaternion.Euler(eulerRotation.x, eulerRotation.y, 0);
     }
 
     public void Movement()

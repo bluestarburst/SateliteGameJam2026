@@ -22,11 +22,18 @@ public class GroundPlayerControl : MonoBehaviour
     private Vector3 anchorpoint;
     private float radiusrestriction;
 
+    private bool playerLocked = false;
+
     // Update is called once per frame
     void Update()
     {
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
+
+        if (playerLocked) {
+            return;
+        }
+
         Movement();
         Rotation();
     }
@@ -38,15 +45,15 @@ public class GroundPlayerControl : MonoBehaviour
 
         // flip x and y for better control
         mouseInput = new Vector2(-mouseInput.y, mouseInput.x);
-        transform.Rotate(mouseInput * sensitivity);
+        Camera.main.transform.Rotate(mouseInput * sensitivity);
 
-        float x = transform.rotation.eulerAngles.x;
+        float x = Camera.main.transform.rotation.eulerAngles.x;
         if (x > 180f) x -= 360f;
 
         x = Mathf.Max(x, -85f);
         x = Mathf.Min(x, 85f);
 
-        transform.rotation = Quaternion.Euler(x, transform.rotation.eulerAngles.y, 0);
+        Camera.main.transform.rotation = Quaternion.Euler(x, Camera.main.transform.rotation.eulerAngles.y, 0);
     }
 
     private void Movement()
@@ -76,7 +83,7 @@ public class GroundPlayerControl : MonoBehaviour
 
         // Move
         Vector3 finalMove = playerSpeed * (move + playerVelocity);
-        finalMove = Quaternion.Euler(0, transform.rotation.eulerAngles.y, 0) * finalMove;
+        finalMove = Quaternion.Euler(0, Camera.main.transform.rotation.eulerAngles.y, 0) * finalMove;
 
         Vector3 currentPosition = transform.position;
         Vector3 predictedMove = currentPosition + finalMove * Time.deltaTime;
@@ -115,5 +122,13 @@ public class GroundPlayerControl : MonoBehaviour
     public void untether() {
         Debug.Log("Untethered");
         tethered = false;
+    }
+
+    public void lockPlayer() {
+        playerLocked = true;
+    }
+
+    public void unlockPlayer() {
+        playerLocked = false;
     }
 }

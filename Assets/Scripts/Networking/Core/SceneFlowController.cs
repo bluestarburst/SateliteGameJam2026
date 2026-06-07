@@ -52,10 +52,23 @@ namespace SatelliteGameJam.Networking.Core
         {
             if (gameFlowDefinition != null)
             {
-                string mapped = gameFlowDefinition.ResolveSceneName(sceneId);
-                if (!string.IsNullOrWhiteSpace(mapped))
+                if (gameFlowDefinition.TryGetSceneEntry(sceneId, out FlowSceneEntry entry))
                 {
-                    return mapped;
+                    if (sceneId == NetworkSceneId.GroundControl || sceneId == NetworkSceneId.SpaceStation)
+                    {
+                        if (entry.modeType == GameModeType.Lobby || entry.modeType == GameModeType.Matchmaking)
+                        {
+                            Debug.LogWarning($"[SceneFlowController] Invalid flow mapping for gameplay scene {sceneId}: {entry.sceneName} ({entry.modeType}). Falling back to NetworkingConfiguration.");
+                        }
+                        else
+                        {
+                            return entry.sceneName;
+                        }
+                    }
+                    else if (!string.IsNullOrWhiteSpace(entry.sceneName))
+                    {
+                        return entry.sceneName;
+                    }
                 }
             }
 

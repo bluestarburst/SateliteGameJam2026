@@ -12,4 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b77ab92b0a7444d892b5c781d584928, type: 3}
   m_Name: RoleVisualProfile
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.RoleVisualProfile
-  entries: []
+  entries:
+  - role: 2
+    scene: 2
+    visualPrefab: {fileID: 0}
+  - role: 3
+    scene: 3
+    visualPrefab: {fileID: 0}

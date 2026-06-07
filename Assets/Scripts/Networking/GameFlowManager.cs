@@ -149,8 +149,7 @@ namespace SatelliteGameJam.Networking
         /// </summary>
         public bool IsLocalPlayerHost()
         {
-            if (SteamManager.Instance == null) return false;
-            return SteamManager.Instance.currentLobby.Owner.Id == SteamManager.Instance.PlayerSteamId;
+            return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
         }
 
         // ===== GAME START/END =====
@@ -276,6 +275,34 @@ namespace SatelliteGameJam.Networking
             }
         }
 
+        public void ReportSatelliteModuleDamage(SatelliteModuleId moduleId)
+        {
+            if (SatelliteStateManager.Instance != null)
+            {
+                SatelliteStateManager.Instance.SetModuleDamaged(moduleId);
+
+                if (logDebug) Debug.Log($"[GameFlowManager] Satellite module {moduleId} damaged");
+            }
+            else
+            {
+                Debug.LogWarning("[GameFlowManager] Cannot report module damage - SatelliteStateManager not available");
+            }
+        }
+
+        public void ReportSatelliteModuleRepair(SatelliteModuleId moduleId)
+        {
+            if (SatelliteStateManager.Instance != null)
+            {
+                SatelliteStateManager.Instance.SetModuleRepaired(moduleId);
+
+                if (logDebug) Debug.Log($"[GameFlowManager] Satellite module {moduleId} repaired");
+            }
+            else
+            {
+                Debug.LogWarning("[GameFlowManager] Cannot report module repair - SatelliteStateManager not available");
+            }
+        }
+
         /// <summary>
         /// Subscribe to satellite health changes.
         /// Use this to update UI health bars.
@@ -330,12 +357,36 @@ namespace SatelliteGameJam.Networking
             }
         }
 
+        public event Action<SatelliteModuleState> OnSatelliteModuleStateChanged
+        {
+            add
+            {
+                if (SatelliteStateManager.Instance != null)
+                    SatelliteStateManager.Instance.OnModuleStateChanged += value;
+            }
+            remove
+            {
+                if (SatelliteStateManager.Instance != null)
+                    SatelliteStateManager.Instance.OnModuleStateChanged -= value;
+            }
+        }
+
         /// <summary>
         /// Get current satellite health (0-100).
         /// </summary>
         public float GetSatelliteHealth()
         {
             return SatelliteStateManager.Instance?.GetHealth() ?? 100f;
+        }
+
+        public float GetSatelliteOverallCondition()
+        {
+            return SatelliteStateManager.Instance?.GetOverallConditionPercent() ?? 100f;
+        }
+
+        public bool IsSatelliteModuleDamaged(SatelliteModuleId moduleId)
+        {
+            return SatelliteStateManager.Instance != null && SatelliteStateManager.Instance.IsModuleDamaged(moduleId);
         }
 
         /// <summary>

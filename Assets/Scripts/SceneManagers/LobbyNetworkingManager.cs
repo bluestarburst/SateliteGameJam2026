@@ -261,9 +261,7 @@ namespace SatelliteGameJam.SceneManagers
         /// </summary>
         public bool IsLocalPlayerHost()
         {
-            if (SteamManager.Instance == null) return false;
-            
-            return SteamManager.Instance.currentLobby.Owner.Id == SteamManager.Instance.PlayerSteamId;
+            return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
         }
 
         /// <summary>

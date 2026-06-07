@@ -34,7 +34,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - sceneId: 3
-    sceneName: Matchmaking
+    sceneName: Satellite
     modeType: 3
     allowedRoles: 
     onWillEnter:

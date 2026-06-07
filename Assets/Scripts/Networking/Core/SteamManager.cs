@@ -26,6 +26,8 @@ public class SteamManager : MonoBehaviour
     [Header("Scenes & Flow")]
     [Tooltip("Optional scene to load when a lobby is ready.")]
     [SerializeField] private string gameSceneName = string.Empty;
+    [Tooltip("Legacy fallback lobby scene name used only when SceneFlowController is unavailable.")]
+    [SerializeField] private string legacyLobbySceneName = "Lobby";
     [SerializeField] private bool autoCreateLobbyForTesting = false;
     [SerializeField] private GameFlowDefinition gameFlowDefinition;
 
@@ -60,6 +62,8 @@ public class SteamManager : MonoBehaviour
     public List<Lobby> activeRankedLobbies = new();
     public Lobby currentLobby;
     private Lobby hostedMultiplayerLobby;
+    private ulong authorityLobbyId;
+    private SteamId lobbyHostId;
 
     // Socket state
     private SteamSocketManager steamSocketManager;
@@ -267,8 +271,12 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyGameCreatedCallback(Lobby lobby, uint ip, ushort port, SteamId steamId)
     {
+        CaptureLobbyHost(lobby);
         SyncRemoteMembersWithLobby(lobby);
-        RouteToLobbyScene();
+        if (ShouldRouteToLobbyFromSteamEvent())
+        {
+            RouteToLobbyScene();
+        }
     }
 
     private void AcceptP2P(SteamId opponentId)
@@ -298,9 +306,10 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyEnteredCallback(Lobby lobby)
     {
+        CaptureLobbyHost(lobby);
         SyncRemoteMembersWithLobby(lobby);
 
-        if (lobby.MemberCount != 1 && !string.IsNullOrEmpty(gameSceneName))
+        if (lobby.MemberCount != 1 && ShouldRouteToLobbyFromSteamEvent())
         {
             RouteToLobbyScene();
         }
@@ -331,8 +340,12 @@ public class SteamManager : MonoBehaviour
         remoteMembers.Clear();
 
         currentLobby = joinedLobby;
+        CaptureLobbyHost(joinedLobby);
         SyncRemoteMembersWithLobby(joinedLobby);
-        RouteToLobbyScene();
+        if (ShouldRouteToLobbyFromSteamEvent())
+        {
+            RouteToLobbyScene();
+        }
     }
 
     private void OnLobbyCreatedCallback(Result result, Lobby lobby)
@@ -357,7 +370,7 @@ public class SteamManager : MonoBehaviour
 
         if (autoStartWhenMinimumPeers &&
             currentLobby.Id.Value != 0 &&
-            currentLobby.IsOwnedBy(PlayerSteamId) &&
+            IsLocalPlayerLobbyHost &&
             currentLobby.MemberCount >= minimumPeersToAutoStart)
         {
             SceneSyncManager.Instance?.RequestStartGame();
@@ -425,6 +438,8 @@ public class SteamManager : MonoBehaviour
             RemoveRemoteMember(remote);
         }
         remoteMembers.Clear();
+        authorityLobbyId = 0;
+        lobbyHostId = 0;
     }
 
     public async Task<bool> CreateFriendLobby(int maxPlayers = 4)
@@ -444,6 +459,7 @@ public class SteamManager : MonoBehaviour
             hostedMultiplayerLobby.SetFriendsOnly();
 
             currentLobby = hostedMultiplayerLobby;
+            CaptureLobbyHost(hostedMultiplayerLobby);
             isHost = true;
             return true;
         }
@@ -475,6 +491,7 @@ public class SteamManager : MonoBehaviour
             hostedMultiplayerLobby.SetData(playerEloDataString, playerElo.ToString());
 
             currentLobby = hostedMultiplayerLobby;
+            CaptureLobbyHost(hostedMultiplayerLobby);
             isHost = true;
             return true;
         }
@@ -488,7 +505,7 @@ public class SteamManager : MonoBehaviour
 
     public void OpenFriendOverlayForGameInvite()
     {
-        if (currentLobby.Id != null)
+        if (HasActiveLobby)
         {
             SteamFriends.OpenGameInviteOverlay(currentLobby.Id);
         }
@@ -511,6 +528,44 @@ public class SteamManager : MonoBehaviour
     }
 
     // --- Multi-peer helpers ---
+
+    public bool HasActiveLobby => currentLobby.Id.Value != 0;
+
+    public bool IsLocalPlayerLobbyHost => IsLobbyHost(PlayerSteamId);
+
+    public bool TryGetLobbyHost(out SteamId hostId)
+    {
+        hostId = 0;
+        if (!HasActiveLobby)
+        {
+            return false;
+        }
+
+        CaptureLobbyHost(currentLobby);
+        hostId = lobbyHostId;
+        return hostId.Value != 0;
+    }
+
+    public bool IsLobbyHost(SteamId steamId)
+    {
+        return TryGetLobbyHost(out SteamId hostId) && hostId == steamId;
+    }
+
+    private void CaptureLobbyHost(Lobby lobby)
+    {
+        if (lobby.Id.Value == 0)
+        {
+            return;
+        }
+
+        if (authorityLobbyId == lobby.Id.Value && lobbyHostId.Value != 0)
+        {
+            return;
+        }
+
+        authorityLobbyId = lobby.Id.Value;
+        lobbyHostId = lobby.Owner.Id;
+    }
 
     private void SyncRemoteMembersWithLobby(Lobby lobby)
     {
@@ -570,10 +625,35 @@ public class SteamManager : MonoBehaviour
             return;
         }
 
-        if (!string.IsNullOrEmpty(gameSceneName))
+        string fallbackLobby = !string.IsNullOrWhiteSpace(legacyLobbySceneName)
+            ? legacyLobbySceneName
+            : NetworkingConfiguration.Instance?.lobbySceneName;
+
+        if (!string.IsNullOrWhiteSpace(fallbackLobby))
         {
-            SceneManager.LoadScene(gameSceneName);
+            SceneManager.LoadScene(fallbackLobby);
         }
+    }
+
+    private bool ShouldRouteToLobbyFromSteamEvent()
+    {
+        // If we are already in a gameplay scene, ignore late/duplicate Steam lobby callbacks.
+        if (PlayerStateManager.Instance != null && PlayerSteamId.Value != 0)
+        {
+            PlayerState localState = PlayerStateManager.Instance.GetPlayerState(PlayerSteamId);
+            if (localState.Scene == NetworkSceneId.GroundControl || localState.Scene == NetworkSceneId.SpaceStation)
+            {
+                return false;
+            }
+        }
+
+        string activeScene = SceneManager.GetActiveScene().name;
+        if (SceneFlowController.Instance != null)
+        {
+            return SceneFlowController.Instance.IsLobbyOrMatchmakingScene(activeScene);
+        }
+
+        return activeScene == "Matchmaking" || activeScene == "Lobby";
     }
 
     private async void RunDevStartupProfile()

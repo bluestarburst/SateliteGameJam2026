@@ -155,7 +155,7 @@ namespace SatelliteGameJam.Networking.Debugging
             GUILayout.Label($"Lobby ID: {steamMgr.currentLobby.Id.Value}");
             GUILayout.Label($"Lobby Size: {steamMgr.currentLobby.MemberCount}");
 
-            if (steamMgr.currentLobby.Owner.Id == steamMgr.PlayerSteamId)
+            if (steamMgr.IsLocalPlayerLobbyHost)
             {
                 GUI.color = Color.cyan;
                 GUILayout.Label("Role: HOST");
