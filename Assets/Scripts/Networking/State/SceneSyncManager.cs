@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Steamworks;
@@ -120,6 +121,7 @@ namespace SatelliteGameJam.Networking.State
                 return;
             }
 
+            GameStateManager.Instance?.SetInGame(true);
             BroadcastRoleBasedScenes();
             BeginAckWindow();
         }
@@ -134,6 +136,7 @@ namespace SatelliteGameJam.Networking.State
                 if (logDebug) Debug.Log("[SceneSync] Not lobby owner; cannot end game.");
                 return;
             }
+            GameStateManager.Instance?.SetInGame(false);
             BroadcastSceneForAll(NetworkSceneId.Lobby);
             BeginAckWindow();
         }
@@ -162,6 +165,47 @@ namespace SatelliteGameJam.Networking.State
                 {
                     SendPlayerSceneAssignment(member.Id, target);
                 }
+            }
+        }
+
+        public void AssignJoiningPlayer(SteamId joiningPlayer)
+        {
+            if (!IsOwner() || joiningPlayer.Value == 0 || PlayerStateManager.Instance == null)
+            {
+                return;
+            }
+
+            StartCoroutine(AssignJoiningPlayerAfterLobbySettles(joiningPlayer));
+        }
+
+        private IEnumerator AssignJoiningPlayerAfterLobbySettles(SteamId joiningPlayer)
+        {
+            yield return new WaitForSeconds(0.25f);
+
+            if (!IsOwner() || PlayerStateManager.Instance == null)
+            {
+                yield break;
+            }
+
+            PlayerState state = PlayerStateManager.Instance.GetPlayerState(joiningPlayer);
+            bool gameInProgress = IsGameInProgress();
+            PlayerRole role = state.Role;
+
+            if (role == PlayerRole.None || role == PlayerRole.Lobby)
+            {
+                role = gameInProgress ? ChooseRoleForMidRoundJoin() : PlayerRole.Lobby;
+                PlayerStateManager.Instance.SetPlayerRoleFromAuthority(joiningPlayer, role);
+            }
+
+            NetworkSceneId targetScene = gameInProgress
+                ? ResolveGameplaySceneForRole(role)
+                : NetworkSceneId.Lobby;
+
+            PlayerStateManager.Instance.SetPlayerSceneFromAuthority(joiningPlayer, targetScene, role);
+
+            if (logDebug)
+            {
+                Debug.Log($"[SceneSync] Assigned joining player {joiningPlayer} to role {role}, scene {targetScene}");
             }
         }
 
@@ -431,17 +475,8 @@ namespace SatelliteGameJam.Networking.State
 
         private void SendPlayerSceneAssignment(SteamId targetPlayer, NetworkSceneId targetScene)
         {
-              byte[] packet = new byte[16]; // Type(1) + SteamId(8) + SceneId(2) + Role(1) + Timestamp(4)
-            packet[0] = (byte)NetworkMessageType.PlayerSceneState;
-            int offset = 1;
-            NetworkSerialization.WriteULong(packet, ref offset, targetPlayer);
-            packet[offset++] = (byte)(((ushort)targetScene) >> 8);
-            packet[offset++] = (byte)(((ushort)targetScene) & 0xFF);
             var role = PlayerStateManager.Instance?.GetPlayerState(targetPlayer).Role ?? PlayerRole.None;
-            packet[offset++] = (byte)role;
-            NetworkSerialization.WriteFloat(packet, ref offset, Time.time);
-
-            NetworkConnectionManager.Instance.SendToAll(packet, 4, P2PSend.Reliable);
+            PlayerStateManager.Instance?.SetPlayerSceneFromAuthority(targetPlayer, targetScene, role);
         }
 
         private void SendSceneAck()
@@ -525,6 +560,48 @@ namespace SatelliteGameJam.Networking.State
                     if (logDebug) Debug.Log("[SceneSync] All players acknowledged scene change");
                 }
             }
+        }
+
+        private bool IsGameInProgress()
+        {
+            if (GameStateManager.Instance != null && GameStateManager.Instance.IsInGame)
+            {
+                return true;
+            }
+
+            if (SteamManager.Instance == null || PlayerStateManager.Instance == null)
+            {
+                return false;
+            }
+
+            foreach (var member in SteamManager.Instance.currentLobby.Members)
+            {
+                NetworkSceneId scene = PlayerStateManager.Instance.GetPlayerState(member.Id).Scene;
+                if (scene == NetworkSceneId.GroundControl || scene == NetworkSceneId.SpaceStation)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private PlayerRole ChooseRoleForMidRoundJoin()
+        {
+            int groundCount = 0;
+            int spaceCount = 0;
+
+            if (SteamManager.Instance != null && PlayerStateManager.Instance != null)
+            {
+                foreach (var member in SteamManager.Instance.currentLobby.Members)
+                {
+                    PlayerRole role = PlayerStateManager.Instance.GetPlayerState(member.Id).Role;
+                    if (role == PlayerRole.GroundControl) groundCount++;
+                    if (role == PlayerRole.SpaceStation) spaceCount++;
+                }
+            }
+
+            return groundCount <= spaceCount ? PlayerRole.GroundControl : PlayerRole.SpaceStation;
         }
     }
 }

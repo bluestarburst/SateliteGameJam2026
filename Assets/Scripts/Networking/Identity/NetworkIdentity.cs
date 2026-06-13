@@ -71,7 +71,12 @@ namespace SatelliteGameJam.Networking.Identity
     public void SetNetworkId(uint id)
     {
         // ID assignment
-        if (registry.ContainsKey(id))
+        if (networkId != 0 && registry.TryGetValue(networkId, out var current) && current == this)
+        {
+            registry.Remove(networkId);
+        }
+
+        if (registry.TryGetValue(id, out var existing) && existing != this)
         {
             Debug.LogWarning($"Network ID {id} already exists. Overwriting existing entry.");
         }
@@ -85,7 +90,7 @@ namespace SatelliteGameJam.Networking.Identity
     private void RegisterObject()
     {
         // Register this object in the static registry
-        if (registry.ContainsKey(networkId))
+        if (registry.TryGetValue(networkId, out var existing) && existing != this)
         {
             Debug.LogWarning($"Network ID {networkId} already exists. Overwriting existing entry.");
         }
@@ -100,7 +105,7 @@ namespace SatelliteGameJam.Networking.Identity
     private void UnregisterObject()
     {
         // Unregister this object from the static registry
-        if (registry.ContainsKey(networkId))
+        if (registry.TryGetValue(networkId, out var existing) && existing == this)
         {
             registry.Remove(networkId);
         }
@@ -111,9 +116,35 @@ namespace SatelliteGameJam.Networking.Identity
     /// </summary>
     private uint GenerateNetworkId()
     {
-        // ID generation
-        // Hash of the object's name and position.
-        return (uint)(name.GetHashCode() ^ transform.position.GetHashCode());
+        unchecked
+        {
+            const uint fnvOffset = 2166136261u;
+            const uint fnvPrime = 16777619u;
+
+            uint hash = fnvOffset;
+            string path = BuildStableObjectPath();
+            for (int i = 0; i < path.Length; i++)
+            {
+                hash ^= path[i];
+                hash *= fnvPrime;
+            }
+
+            return hash == 0 ? 1u : hash;
+        }
+    }
+
+    private string BuildStableObjectPath()
+    {
+        string path = gameObject.scene.IsValid() ? gameObject.scene.name : "Runtime";
+        Transform current = transform;
+
+        while (current != null)
+        {
+            path = $"{current.GetSiblingIndex()}:{current.name}/{path}";
+            current = current.parent;
+        }
+
+        return path;
     }
 }
 }

@@ -1,8 +1,7 @@
-using System.Collections.Generic;
+using SatelliteGameJam.Networking;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Core;
-using Steamworks;
 using UnityEngine;
 
 namespace SatelliteGameJam.SceneManagers
@@ -49,10 +48,14 @@ namespace SatelliteGameJam.SceneManagers
         /// </summary>
         public void RepairComponent(int componentIndex)
         {
-            if (SatelliteStateManager.Instance != null)
+            if (GameFlowManager.Instance != null)
             {
-                SatelliteStateManager.Instance.SetComponentRepaired(componentIndex);
+                GameFlowManager.Instance.ReportSatelliteRepair(componentIndex);
                 Debug.Log($"[SpaceStation] Repaired component {componentIndex}");
+            }
+            else
+            {
+                SatelliteStateManager.Instance?.RequestComponentRepaired(componentIndex);
             }
         }
 

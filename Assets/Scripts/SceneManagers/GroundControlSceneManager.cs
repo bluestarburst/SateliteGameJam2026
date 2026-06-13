@@ -1,9 +1,7 @@
-using System.Collections.Generic;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Core;
 using SatelliteGameJam.Networking.Voice;
-using Steamworks;
 using UnityEngine;
 
 namespace SatelliteGameJam.SceneManagers
@@ -54,11 +52,6 @@ namespace SatelliteGameJam.SceneManagers
 
         private void OnDestroy()
         {
-            if (PlayerStateManager.Instance != null)
-            {
-                // SceneSyncManager now owns remote spawn lifecycle.
-            }
-
             if (SatelliteStateManager.Instance != null)
             {
                 SatelliteStateManager.Instance.OnHealthChanged -= OnHealthChanged;

@@ -1,19 +1,12 @@
-using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using SatelliteGameJam.Networking.Core;
 
 // Attach to a UI Button; calls SteamManager to create a lobby and loads a lobby scene
 public class CreateLobbyButton : MonoBehaviour
 {
-    [Header("Scene Routing")]
-    [SerializeField] private string lobbySceneName = ""; // Set to your lobby scene name
-
     [Header("Lobby Parameters")]
     [SerializeField] private int staticLobbyParams = 0; // Example data stored in lobby
 
-
-    
     public async void CreatePublicLobby()
     {
         if (SteamManager.Instance == null)
@@ -27,17 +20,9 @@ public class CreateLobbyButton : MonoBehaviour
         {
             Debug.Log("Failed to create lobby");
             return;
-            }
+        }
 
-        // Route to lobby scene after creation
-        if (SceneFlowController.Instance != null)
-        {
-            SceneFlowController.Instance.LoadLobbyScene();
-        }
-        else if (!string.IsNullOrEmpty(lobbySceneName))
-        {
-            SceneManager.LoadScene(lobbySceneName);
-        }
+        RouteToLobby();
     }
 
     public async void CreateFriendsOnlyLobby()
@@ -55,13 +40,17 @@ public class CreateLobbyButton : MonoBehaviour
             return;
         }
 
+        RouteToLobby();
+    }
+
+    private void RouteToLobby()
+    {
         if (SceneFlowController.Instance != null)
         {
             SceneFlowController.Instance.LoadLobbyScene();
+            return;
         }
-        else if (!string.IsNullOrEmpty(lobbySceneName))
-        {
-            SceneManager.LoadScene(lobbySceneName);
-        }
+
+        Debug.LogWarning("[CreateLobbyButton] Lobby created, but SceneFlowController is unavailable for scene routing.");
     }
 }

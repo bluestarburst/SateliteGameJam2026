@@ -1,10 +1,11 @@
-using Steamworks.Data;
 using Steamworks;
+using Steamworks.Data;
 using UnityEngine;
 using TMPro;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
 using System.Collections.Generic;
+using SatelliteGameJam.Networking;
 using SatelliteGameJam.Networking.Core;
 
 // Displays members of the current lobby in a ScrollView
@@ -227,7 +228,14 @@ public class LobbyPlayersView : MonoBehaviour
 
         Debug.Log("Joining space team");
 
-        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.SpaceStation);
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.SelectRole(PlayerRole.SpaceStation);
+        }
+        else
+        {
+            PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.SpaceStation);
+        }
 
         SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.5f, 0.8f, 1f)); // Light blue for space team
 
@@ -244,7 +252,14 @@ public class LobbyPlayersView : MonoBehaviour
 
         Debug.Log("Joining ground team");
 
-        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.SelectRole(PlayerRole.GroundControl);
+        }
+        else
+        {
+            PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
+        }
 
         SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.8f, 0.5f, 0.5f)); // Light red for ground team  
 
@@ -254,6 +269,12 @@ public class LobbyPlayersView : MonoBehaviour
     public void StartGame()
     {
         // Initiate collective scene change if local player owns the lobby
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.StartGame();
+            return;
+        }
+
         if (SteamManager.Instance == null || SceneSyncManager.Instance == null)
         {
             Debug.LogWarning("Cannot start game - missing SteamManager or SceneSyncManager.");

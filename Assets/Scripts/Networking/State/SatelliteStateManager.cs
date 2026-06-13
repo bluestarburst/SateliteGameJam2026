@@ -85,6 +85,8 @@ namespace SatelliteGameJam.Networking.State
                 NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SatelliteHealth, OnReceiveSatelliteHealth);
                 NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SatellitePartTransform, OnReceiveSatellitePartTransform);
                 NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.ConsoleState, OnReceiveConsoleState);
+                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.SatelliteComponentStateRequest, OnReceiveSatelliteComponentStateRequest);
+                NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.ConsoleStateRequest, OnReceiveConsoleStateRequest);
                 NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.StateSnapshotRequest, OnReceiveStateSnapshotRequest);
                 NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.StateSnapshotResponse, OnReceiveStateSnapshotResponse);
             }
@@ -93,7 +95,7 @@ namespace SatelliteGameJam.Networking.State
         private void Update()
         {
             // Send state updates at fixed rate if dirty
-            if (IsAuthority() && isDirty && Time.time >= nextSendTime)
+            if (HasNetworkSession() && IsAuthority() && isDirty && Time.time >= nextSendTime)
             {
                 SendHealthUpdate();
                 nextSendTime = Time.time + (1f / sendRate);
@@ -107,7 +109,7 @@ namespace SatelliteGameJam.Networking.State
         /// </summary>
         private bool IsAuthority()
         {
-            return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
+            return !HasNetworkSession() || SteamManager.Instance.IsLocalPlayerLobbyHost;
         }
 
         private static bool IsValidComponentIndex(int componentIndex)
@@ -118,6 +120,14 @@ namespace SatelliteGameJam.Networking.State
         private bool IsAuthoritativeSender(SteamId sender)
         {
             return SteamManager.Instance != null && SteamManager.Instance.IsLobbyHost(sender);
+        }
+
+        private bool HasNetworkSession()
+        {
+            return SteamManager.Instance != null
+                && SteamManager.Instance.PlayerSteamId.Value != 0
+                && SteamManager.Instance.HasActiveLobby
+                && NetworkConnectionManager.Instance != null;
         }
 
         private void InitializeModuleStates()
@@ -164,12 +174,22 @@ namespace SatelliteGameJam.Networking.State
             SetComponentDamage(componentIndex, true);
         }
 
+        public void RequestComponentDamaged(int componentIndex)
+        {
+            RequestComponentDamage(componentIndex, true);
+        }
+
         /// <summary>
         /// Marks a component as repaired.
         /// </summary>
         public void SetComponentRepaired(int componentIndex)
         {
             SetComponentDamage(componentIndex, false);
+        }
+
+        public void RequestComponentRepaired(int componentIndex)
+        {
+            RequestComponentDamage(componentIndex, false);
         }
 
         public bool IsComponentDamaged(int componentIndex)
@@ -185,10 +205,22 @@ namespace SatelliteGameJam.Networking.State
             SetComponentDamaged((int)moduleState.DamageBitIndex);
         }
 
+        public void RequestModuleDamaged(SatelliteModuleId moduleId)
+        {
+            if (!TryGetModuleState(moduleId, out var moduleState)) return;
+            RequestComponentDamaged((int)moduleState.DamageBitIndex);
+        }
+
         public void SetModuleRepaired(SatelliteModuleId moduleId)
         {
             if (!TryGetModuleState(moduleId, out var moduleState)) return;
             SetComponentRepaired((int)moduleState.DamageBitIndex);
+        }
+
+        public void RequestModuleRepaired(SatelliteModuleId moduleId)
+        {
+            if (!TryGetModuleState(moduleId, out var moduleState)) return;
+            RequestComponentRepaired((int)moduleState.DamageBitIndex);
         }
 
         public bool IsModuleDamaged(SatelliteModuleId moduleId)
@@ -243,6 +275,19 @@ namespace SatelliteGameJam.Networking.State
 
             ApplyDamageBits(newDamageBits, true);
             isDirty = true;
+        }
+
+        private void RequestComponentDamage(int componentIndex, bool damaged)
+        {
+            if (!IsValidComponentIndex(componentIndex)) return;
+
+            if (IsAuthority())
+            {
+                SetComponentDamage(componentIndex, damaged);
+                return;
+            }
+
+            SendComponentStateRequest(componentIndex, damaged);
         }
 
         private void ApplyDamageBits(uint newDamageBits, bool raiseEvents)
@@ -303,16 +348,22 @@ namespace SatelliteGameJam.Networking.State
         {
             if (!IsAuthority()) return;
 
-            var state = new ConsoleStateData
-            {
-                ConsoleId = consoleId,
-                StateByte = stateByte,
-                Payload = payload
-            };
+            ApplyConsoleState(consoleId, stateByte, payload, HasNetworkSession());
+        }
 
-            consoleStates[consoleId] = state;
-            BroadcastConsoleState(state);
-            OnConsoleStateChanged?.Invoke(consoleId, state);
+        public void RequestConsoleState(uint consoleId, byte stateByte, byte[] payload = null)
+        {
+            SteamId requester = SteamManager.Instance != null ? SteamManager.Instance.PlayerSteamId : 0;
+            if (IsAuthority())
+            {
+                if (CanApplyConsoleStateRequest(requester, consoleId, stateByte, payload))
+                {
+                    ApplyConsoleState(consoleId, stateByte, payload, HasNetworkSession());
+                }
+                return;
+            }
+
+            SendConsoleStateRequest(consoleId, stateByte, payload);
         }
 
         public ConsoleStateData GetConsoleState(uint consoleId)
@@ -335,7 +386,10 @@ namespace SatelliteGameJam.Networking.State
             };
 
             partTransforms[partId] = part;
-            BroadcastPartTransform(part);
+            if (HasNetworkSession())
+            {
+                BroadcastPartTransform(part);
+            }
             OnPartTransformChanged?.Invoke(partId, part);
         }
 
@@ -348,6 +402,11 @@ namespace SatelliteGameJam.Networking.State
 
         private void SendHealthUpdate()
         {
+            if (NetworkConnectionManager.Instance == null)
+            {
+                return;
+            }
+
             byte[] packet = new byte[9];
             packet[0] = (byte)NetworkMessageType.SatelliteHealth;
             int offset = 1;
@@ -359,6 +418,11 @@ namespace SatelliteGameJam.Networking.State
 
         private void BroadcastPartTransform(PartTransformData part)
         {
+            if (NetworkConnectionManager.Instance == null)
+            {
+                return;
+            }
+
             byte[] packet = new byte[37]; // Type(1) + PartId(4) + Pos(12) + Rot(16) + Timestamp(4)
             packet[0] = (byte)NetworkMessageType.SatellitePartTransform;
             int offset = 1;
@@ -370,6 +434,11 @@ namespace SatelliteGameJam.Networking.State
 
         private void BroadcastConsoleState(ConsoleStateData state)
         {
+            if (NetworkConnectionManager.Instance == null)
+            {
+                return;
+            }
+
             int payloadSize = state.Payload?.Length ?? 0;
             byte[] packet = new byte[6 + payloadSize]; // Type(1) + ConsoleId(4) + StateByte(1) + Payload(N)
             packet[0] = (byte)NetworkMessageType.ConsoleState;
@@ -381,6 +450,58 @@ namespace SatelliteGameJam.Networking.State
                 Buffer.BlockCopy(state.Payload, 0, packet, offset, payloadSize);
             }
             NetworkConnectionManager.Instance.SendToAll(packet, 4, P2PSend.Reliable);
+        }
+
+        private void SendConsoleStateRequest(uint consoleId, byte stateByte, byte[] payload = null)
+        {
+            if (NetworkConnectionManager.Instance == null || SteamManager.Instance == null)
+            {
+                return;
+            }
+
+            if (!SteamManager.Instance.TryGetLobbyHost(out SteamId hostId))
+            {
+                Debug.LogWarning("[SatelliteStateManager] Cannot send console state request - no lobby host found");
+                return;
+            }
+
+            int payloadSize = payload?.Length ?? 0;
+            byte[] packet = new byte[14 + payloadSize];
+            int offset = 0;
+            packet[offset++] = (byte)NetworkMessageType.ConsoleStateRequest;
+            NetworkSerialization.WriteULong(packet, ref offset, SteamManager.Instance.PlayerSteamId);
+            NetworkSerialization.WriteUInt(packet, ref offset, consoleId);
+            packet[offset++] = stateByte;
+
+            if (payloadSize > 0)
+            {
+                Buffer.BlockCopy(payload, 0, packet, offset, payloadSize);
+            }
+
+            NetworkConnectionManager.Instance.SendTo(hostId, packet, 4, P2PSend.Reliable);
+        }
+
+        private void SendComponentStateRequest(int componentIndex, bool damaged)
+        {
+            if (NetworkConnectionManager.Instance == null || SteamManager.Instance == null)
+            {
+                return;
+            }
+
+            if (!SteamManager.Instance.TryGetLobbyHost(out SteamId hostId))
+            {
+                Debug.LogWarning("[SatelliteStateManager] Cannot send component state request - no lobby host found");
+                return;
+            }
+
+            byte[] packet = new byte[11];
+            int offset = 0;
+            packet[offset++] = (byte)NetworkMessageType.SatelliteComponentStateRequest;
+            NetworkSerialization.WriteULong(packet, ref offset, SteamManager.Instance.PlayerSteamId);
+            packet[offset++] = (byte)componentIndex;
+            packet[offset] = damaged ? (byte)1 : (byte)0;
+
+            NetworkConnectionManager.Instance.SendTo(hostId, packet, 4, P2PSend.Reliable);
         }
 
         // ===== Message Receiving =====
@@ -448,6 +569,141 @@ namespace SatelliteGameJam.Networking.State
             OnConsoleStateChanged?.Invoke(consoleId, state);
         }
 
+        private void OnReceiveSatelliteComponentStateRequest(SteamId sender, byte[] data)
+        {
+            if (!IsAuthority()) return;
+            if (data.Length < 11) return;
+
+            int offset = 1;
+            SteamId requesterId = NetworkSerialization.ReadULong(data, ref offset);
+            if (requesterId != sender)
+            {
+                return;
+            }
+
+            int componentIndex = data[offset++];
+            bool damaged = data[offset] != 0;
+            SetComponentDamage(componentIndex, damaged);
+        }
+
+        private void OnReceiveConsoleStateRequest(SteamId sender, byte[] data)
+        {
+            if (!IsAuthority()) return;
+            if (data.Length < 14) return;
+
+            int offset = 1;
+            SteamId requesterId = NetworkSerialization.ReadULong(data, ref offset);
+            if (requesterId != sender)
+            {
+                return;
+            }
+
+            uint consoleId = NetworkSerialization.ReadUInt(data, ref offset);
+            byte stateByte = data[offset++];
+
+            byte[] payload = null;
+            int payloadSize = data.Length - offset;
+            if (payloadSize > 0)
+            {
+                payload = new byte[payloadSize];
+                Buffer.BlockCopy(data, offset, payload, 0, payloadSize);
+            }
+
+            if (!CanApplyConsoleStateRequest(requesterId, consoleId, stateByte, payload))
+            {
+                return;
+            }
+
+            ApplyConsoleState(consoleId, stateByte, payload, true);
+        }
+
+        private void ApplyConsoleState(uint consoleId, byte stateByte, byte[] payload, bool broadcast)
+        {
+            var state = new ConsoleStateData
+            {
+                ConsoleId = consoleId,
+                StateByte = stateByte,
+                Payload = payload
+            };
+
+            consoleStates[consoleId] = state;
+
+            if (broadcast)
+            {
+                BroadcastConsoleState(state);
+            }
+
+            OnConsoleStateChanged?.Invoke(consoleId, state);
+        }
+
+        private bool CanApplyConsoleStateRequest(SteamId requester, uint consoleId, byte stateByte, byte[] payload)
+        {
+            if (!HasNetworkSession())
+            {
+                return true;
+            }
+
+            bool requestedOccupied = stateByte != 0;
+            SteamId requestedOwner = 0;
+            bool hasRequestedOwner = TryReadConsolePayloadOwner(payload, out requestedOwner);
+
+            consoleStates.TryGetValue(consoleId, out var currentState);
+            bool currentOccupied = currentState != null && currentState.StateByte != 0;
+            SteamId currentOwner = 0;
+            bool hasCurrentOwner = currentOccupied && TryReadConsolePayloadOwner(currentState.Payload, out currentOwner);
+
+            if (currentOccupied && hasCurrentOwner && !IsCurrentLobbyMember(currentOwner))
+            {
+                currentOccupied = false;
+            }
+
+            if (!requestedOccupied)
+            {
+                bool requesterIsHost = SteamManager.Instance != null
+                    && SteamManager.Instance.IsLocalPlayerLobbyHost
+                    && requester == SteamManager.Instance.PlayerSteamId;
+                return !currentOccupied || !hasCurrentOwner || currentOwner == requester || requesterIsHost;
+            }
+
+            if (!hasRequestedOwner || requestedOwner != requester)
+            {
+                return false;
+            }
+
+            return !currentOccupied || !hasCurrentOwner || currentOwner == requester;
+        }
+
+        private bool TryReadConsolePayloadOwner(byte[] payload, out SteamId owner)
+        {
+            owner = 0;
+            if (payload == null || payload.Length < 9 || payload[0] != 1)
+            {
+                return false;
+            }
+
+            int offset = 1;
+            owner = NetworkSerialization.ReadULong(payload, ref offset);
+            return owner.Value != 0;
+        }
+
+        private bool IsCurrentLobbyMember(SteamId steamId)
+        {
+            if (SteamManager.Instance == null || !SteamManager.Instance.HasActiveLobby)
+            {
+                return false;
+            }
+
+            foreach (var member in SteamManager.Instance.currentLobby.Members)
+            {
+                if (member.Id == steamId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         // ===== Late-Join Synchronization =====
 
         /// <summary>
@@ -506,7 +762,7 @@ namespace SatelliteGameJam.Networking.State
         /// </summary>
         private void SendStateSnapshot(SteamId targetSteamId)
         {
-            // Calculate packet size: Type(1) + Health(4) + DamageBits(4) + ConsoleCount(2) + ConsoleData + PlayerStateCount(1)
+            // Calculate packet size: Type(1) + Health(4) + DamageBits(4) + ConsoleCount(2) + ConsoleData + PlayerStateCount(1) + PlayerData
             int consoleDataSize = 0;
             foreach (var console in consoleStates.Values)
             {
@@ -517,8 +773,10 @@ namespace SatelliteGameJam.Networking.State
                     consoleDataSize += 2; // PayloadLength(2) = 0
             }
 
-            // For now, we'll keep player state simple (can be expanded later)
-            int playerStateDataSize = 0;
+            IReadOnlyCollection<PlayerState> playerStates = PlayerStateManager.Instance != null
+                ? PlayerStateManager.Instance.GetPlayerStates()
+                : Array.Empty<PlayerState>();
+            int playerStateDataSize = playerStates.Count * 12; // SteamId(8) + Scene(2) + Role(1) + Ready(1)
 
             byte[] packet = new byte[1 + 4 + 4 + 2 + consoleDataSize + 1 + playerStateDataSize];
             int offset = 0;
@@ -544,8 +802,21 @@ namespace SatelliteGameJam.Networking.State
                 }
             }
 
-            // Player state count (for future expansion)
-            packet[offset++] = 0;
+            packet[offset++] = (byte)Mathf.Min(playerStates.Count, byte.MaxValue);
+            int writtenPlayerStates = 0;
+            foreach (var playerState in playerStates)
+            {
+                if (writtenPlayerStates >= byte.MaxValue)
+                {
+                    break;
+                }
+
+                NetworkSerialization.WriteULong(packet, ref offset, playerState.SteamId);
+                NetworkSerialization.WriteUShort(packet, ref offset, (ushort)playerState.Scene);
+                packet[offset++] = (byte)playerState.Role;
+                packet[offset++] = playerState.IsReady ? (byte)1 : (byte)0;
+                writtenPlayerStates++;
+            }
 
             // Send directly to requester
             NetworkConnectionManager.Instance.SendTo(targetSteamId, packet, 0, P2PSend.Reliable);
@@ -597,11 +868,21 @@ namespace SatelliteGameJam.Networking.State
                 OnConsoleStateChanged?.Invoke(consoleId, consoleState);
             }
 
-            // Read player state count (for future use)
+            // Read player states
             if (offset < data.Length)
             {
                 byte playerStateCount = data[offset++];
-                // Future: read player states here
+                for (int i = 0; i < playerStateCount; i++)
+                {
+                    if (offset + 12 > data.Length) break;
+
+                    SteamId steamId = NetworkSerialization.ReadULong(data, ref offset);
+                    NetworkSceneId scene = (NetworkSceneId)NetworkSerialization.ReadUShort(data, ref offset);
+                    PlayerRole role = (PlayerRole)data[offset++];
+                    bool isReady = data[offset++] != 0;
+
+                    PlayerStateManager.Instance?.ApplySnapshotPlayerState(steamId, scene, role, isReady);
+                }
             }
 
             Debug.Log($"[SatelliteStateManager] Received and applied state snapshot from {sender}");

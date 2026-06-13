@@ -45,6 +45,12 @@ namespace SatelliteGameJam.Networking.Sync
         currentOwner = pickerId;
         netIdentity.SetOwner(pickerId);
 
+        if (NetworkConnectionManager.Instance == null)
+        {
+            OnPickedUp?.Invoke(pickerId);
+            return true;
+        }
+
         // Send pickup event to all peers
         byte[] packet = new byte[13];
         int offset = 0;
@@ -72,6 +78,18 @@ namespace SatelliteGameJam.Networking.Sync
         currentOwner = 0;
         netIdentity.SetOwner(0);
 
+        if (NetworkConnectionManager.Instance == null)
+        {
+            transform.position = dropPosition;
+            if (TryGetComponent<Rigidbody>(out var localRb))
+            {
+                localRb.linearVelocity = dropVelocity;
+            }
+
+            OnDropped?.Invoke(dropperId);
+            return;
+        }
+
         // Send drop event to all peers
         byte[] packet = new byte[37];
         int offset = 0;
@@ -91,6 +109,12 @@ namespace SatelliteGameJam.Networking.Sync
     /// </summary>
     public void Use(SteamId userId)
     {
+        if (NetworkConnectionManager.Instance == null)
+        {
+            OnUsed?.Invoke(userId);
+            return;
+        }
+
         byte[] packet = new byte[13];
         int offset = 0;
         packet[offset++] = (byte)NetworkMessageType.InteractionUse;
@@ -121,6 +145,11 @@ namespace SatelliteGameJam.Networking.Sync
         int offset = 5;
 
         SteamId pickerId = NetworkSerialization.ReadULong(data, ref offset);
+        if (sender != pickerId)
+        {
+            return;
+        }
+
         currentOwner = pickerId;
         netIdentity.SetOwner(pickerId);
 
@@ -145,6 +174,11 @@ namespace SatelliteGameJam.Networking.Sync
         int offset = 5;
         
         SteamId dropperId = NetworkSerialization.ReadULong(data, ref offset);
+        if (sender != dropperId)
+        {
+            return;
+        }
+
         Vector3 dropPos = NetworkSerialization.ReadVector3(data, ref offset);
         Vector3 dropVel = NetworkSerialization.ReadVector3(data, ref offset);
         
@@ -176,6 +210,11 @@ namespace SatelliteGameJam.Networking.Sync
         int offset = 5;
 
         SteamId userId = NetworkSerialization.ReadULong(data, ref offset);
+        if (sender != userId)
+        {
+            return;
+        }
+
         OnUsed?.Invoke(userId);
     }
 }

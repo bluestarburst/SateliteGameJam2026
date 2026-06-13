@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Steamworks;
 using UnityEngine;
+using SatelliteGameJam.Networking;
 using SatelliteGameJam.Networking.Core;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Voice;
@@ -16,15 +17,11 @@ namespace SatelliteGameJam.SceneManagers
     /// </summary>
     public class LobbyNetworkingManager : MonoBehaviour
     {
-        [Header("Player Spawning")]
-        [SerializeField] private Transform playerSpawnParent;
-        [SerializeField] private Vector3 playerSpawnOffset = Vector3.zero;
-
         [Header("Debug")]
         [SerializeField] private bool logDebug = false;
 
         private NetworkingConfiguration config;
-        private List<SteamId> spawnedPlayers = new();
+        private readonly HashSet<SteamId> spawnedPlayers = new();
 
         private void Start()
         {
@@ -45,13 +42,6 @@ namespace SatelliteGameJam.SceneManagers
             // Spawn existing lobby members
             SpawnExistingPlayers();
 
-            // Subscribe to player join/leave events
-            if (PlayerStateManager.Instance != null)
-            {
-                PlayerStateManager.Instance.OnPlayerJoined += OnRemotePlayerJoined;
-                PlayerStateManager.Instance.OnPlayerLeft += OnRemotePlayerLeft;
-            }
-
             if (SteamManager.Instance != null)
             {
                 SteamManager.Instance.RemotePlayerJoined += OnSteamRemotePlayerJoined;
@@ -69,13 +59,6 @@ namespace SatelliteGameJam.SceneManagers
 
         private void OnDestroy()
         {
-            // Unsubscribe from events
-            if (PlayerStateManager.Instance != null)
-            {
-                PlayerStateManager.Instance.OnPlayerJoined -= OnRemotePlayerJoined;
-                PlayerStateManager.Instance.OnPlayerLeft -= OnRemotePlayerLeft;
-            }
-
             if (SteamManager.Instance != null)
             {
                 SteamManager.Instance.RemotePlayerJoined -= OnSteamRemotePlayerJoined;
@@ -140,27 +123,6 @@ namespace SatelliteGameJam.SceneManagers
             }
         }
 
-        /// <summary>
-        /// Called when a new player joins the lobby.
-        /// </summary>
-        private void OnRemotePlayerJoined(SteamId steamId)
-        {
-            if (logDebug) Debug.Log($"[Lobby] Player joined: {steamId}");
-
-            // Find player in lobby members and create voice proxy
-            if (SteamManager.Instance != null && SteamManager.Instance.currentLobby.MemberCount > 0)
-            {
-                foreach (var member in SteamManager.Instance.currentLobby.Members)
-                {
-                    if (member.Id == steamId)
-                    {
-                        CreateVoiceProxyForPlayer(steamId, member.Name);
-                        return;
-                    }
-                }
-            }
-        }
-
         private void OnSteamRemotePlayerJoined(SteamId steamId, string displayName)
         {
             if (SteamManager.Instance == null || steamId == SteamManager.Instance.PlayerSteamId)
@@ -171,10 +133,7 @@ namespace SatelliteGameJam.SceneManagers
             CreateVoiceProxyForPlayer(steamId, string.IsNullOrWhiteSpace(displayName) ? steamId.ToString() : displayName);
         }
 
-        /// <summary>
-        /// Called when a player leaves the lobby.
-        /// </summary>
-        private void OnRemotePlayerLeft(SteamId steamId)
+        private void OnSteamRemotePlayerLeft(SteamId steamId)
         {
             if (logDebug) Debug.Log($"[Lobby] Player left: {steamId}");
 
@@ -185,11 +144,6 @@ namespace SatelliteGameJam.SceneManagers
                 // Clean up voice proxy
                 VoiceSessionManager.Instance?.UnregisterRemotePlayer(steamId);
             }
-        }
-
-        private void OnSteamRemotePlayerLeft(SteamId steamId)
-        {
-            OnRemotePlayerLeft(steamId);
         }
 
         /// <summary>
@@ -215,11 +169,15 @@ namespace SatelliteGameJam.SceneManagers
         /// </summary>
         public void OnReadyButtonPressed()
         {
-            if (PlayerStateManager.Instance != null)
+            if (GameFlowManager.Instance != null)
             {
-                PlayerStateManager.Instance.SetLocalPlayerReady();
+                GameFlowManager.Instance.MarkPlayerReady();
                 
                 if (logDebug) Debug.Log("[Lobby] Local player marked as ready");
+            }
+            else if (PlayerStateManager.Instance != null)
+            {
+                PlayerStateManager.Instance.SetLocalPlayerReady();
             }
         }
 
@@ -229,11 +187,15 @@ namespace SatelliteGameJam.SceneManagers
         /// </summary>
         public void OnRoleSelected(PlayerRole role)
         {
-            if (PlayerStateManager.Instance != null)
+            if (GameFlowManager.Instance != null)
             {
-                PlayerStateManager.Instance.SetLocalPlayerRole(role);
+                GameFlowManager.Instance.SelectRole(role);
                 
                 if (logDebug) Debug.Log($"[Lobby] Local player selected role: {role}");
+            }
+            else if (PlayerStateManager.Instance != null)
+            {
+                PlayerStateManager.Instance.SetLocalPlayerRole(role);
             }
         }
 
@@ -244,11 +206,15 @@ namespace SatelliteGameJam.SceneManagers
         /// </summary>
         public void OnStartGamePressed()
         {
-            if (SceneSyncManager.Instance != null)
+            if (GameFlowManager.Instance != null)
             {
-                SceneSyncManager.Instance.RequestStartGame();
+                GameFlowManager.Instance.StartGame();
                 
                 if (logDebug) Debug.Log("[Lobby] Host requested game start");
+            }
+            else if (SceneSyncManager.Instance != null)
+            {
+                SceneSyncManager.Instance.RequestStartGame();
             }
             else
             {
@@ -261,7 +227,9 @@ namespace SatelliteGameJam.SceneManagers
         /// </summary>
         public bool IsLocalPlayerHost()
         {
-            return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
+            return GameFlowManager.Instance != null
+                ? GameFlowManager.Instance.IsLocalPlayerHost()
+                : SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
         }
 
         /// <summary>

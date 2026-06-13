@@ -31,6 +31,8 @@ namespace SatelliteGameJam.Networking
         [Header("Debug")]
         [SerializeField] private bool logDebug = false;
 
+        private bool playerStateEventsSubscribed;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -49,9 +51,10 @@ namespace SatelliteGameJam.Networking
             // Subscribe to player state events and forward them
             if (PlayerStateManager.Instance != null)
             {
-                PlayerStateManager.Instance.OnPlayerJoined += (steamId) => OnRemotePlayerJoined?.Invoke(steamId);
-                PlayerStateManager.Instance.OnPlayerLeft += (steamId) => OnRemotePlayerLeft?.Invoke(steamId);
+                PlayerStateManager.Instance.OnPlayerJoined += HandleRemotePlayerJoined;
+                PlayerStateManager.Instance.OnPlayerLeft += HandleRemotePlayerLeft;
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+                playerStateEventsSubscribed = true;
             }
 
             SceneManager.sceneLoaded += HandleSceneLoaded;
@@ -59,8 +62,10 @@ namespace SatelliteGameJam.Networking
 
         private void OnDestroy()
         {
-            if (PlayerStateManager.Instance != null)
+            if (PlayerStateManager.Instance != null && playerStateEventsSubscribed)
             {
+                PlayerStateManager.Instance.OnPlayerJoined -= HandleRemotePlayerJoined;
+                PlayerStateManager.Instance.OnPlayerLeft -= HandleRemotePlayerLeft;
                 PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
             }
 
@@ -247,7 +252,7 @@ namespace SatelliteGameJam.Networking
         {
             if (SatelliteStateManager.Instance != null)
             {
-                SatelliteStateManager.Instance.SetComponentDamaged(componentIndex);
+                SatelliteStateManager.Instance.RequestComponentDamaged(componentIndex);
                 
                 if (logDebug) Debug.Log($"[GameFlowManager] Satellite component {componentIndex} damaged");
             }
@@ -265,7 +270,7 @@ namespace SatelliteGameJam.Networking
         {
             if (SatelliteStateManager.Instance != null)
             {
-                SatelliteStateManager.Instance.SetComponentRepaired(componentIndex);
+                SatelliteStateManager.Instance.RequestComponentRepaired(componentIndex);
                 
                 if (logDebug) Debug.Log($"[GameFlowManager] Satellite component {componentIndex} repaired");
             }
@@ -279,7 +284,7 @@ namespace SatelliteGameJam.Networking
         {
             if (SatelliteStateManager.Instance != null)
             {
-                SatelliteStateManager.Instance.SetModuleDamaged(moduleId);
+                SatelliteStateManager.Instance.RequestModuleDamaged(moduleId);
 
                 if (logDebug) Debug.Log($"[GameFlowManager] Satellite module {moduleId} damaged");
             }
@@ -293,7 +298,7 @@ namespace SatelliteGameJam.Networking
         {
             if (SatelliteStateManager.Instance != null)
             {
-                SatelliteStateManager.Instance.SetModuleRepaired(moduleId);
+                SatelliteStateManager.Instance.RequestModuleRepaired(moduleId);
 
                 if (logDebug) Debug.Log($"[GameFlowManager] Satellite module {moduleId} repaired");
             }
@@ -525,6 +530,16 @@ namespace SatelliteGameJam.Networking
             }
 
             OnSceneLoading?.Invoke(sceneId);
+        }
+
+        private void HandleRemotePlayerJoined(SteamId steamId)
+        {
+            OnRemotePlayerJoined?.Invoke(steamId);
+        }
+
+        private void HandleRemotePlayerLeft(SteamId steamId)
+        {
+            OnRemotePlayerLeft?.Invoke(steamId);
         }
 
         private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)

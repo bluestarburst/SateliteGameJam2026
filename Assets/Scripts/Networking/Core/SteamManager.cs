@@ -24,8 +24,6 @@ public class SteamManager : MonoBehaviour
     [SerializeField] private uint gameAppId = 480; // Spacewar default for local testing
 
     [Header("Scenes & Flow")]
-    [Tooltip("Optional scene to load when a lobby is ready.")]
-    [SerializeField] private string gameSceneName = string.Empty;
     [Tooltip("Legacy fallback lobby scene name used only when SceneFlowController is unavailable.")]
     [SerializeField] private string legacyLobbySceneName = "Lobby";
     [SerializeField] private bool autoCreateLobbyForTesting = false;
@@ -300,14 +298,13 @@ public class SteamManager : MonoBehaviour
 
         Debug.Log("incoming chat message");
         Debug.Log(message);
-        lobby.SetJoinable(false);
-        lobby.SetGameServer(PlayerSteamId);
     }
 
     private void OnLobbyEnteredCallback(Lobby lobby)
     {
         CaptureLobbyHost(lobby);
         SyncRemoteMembersWithLobby(lobby);
+        PlayerStateManager.Instance?.HandleLocalLobbyEntered();
 
         if (lobby.MemberCount != 1 && ShouldRouteToLobbyFromSteamEvent())
         {
@@ -342,6 +339,7 @@ public class SteamManager : MonoBehaviour
         currentLobby = joinedLobby;
         CaptureLobbyHost(joinedLobby);
         SyncRemoteMembersWithLobby(joinedLobby);
+        PlayerStateManager.Instance?.HandleLocalLobbyEntered();
         if (ShouldRouteToLobbyFromSteamEvent())
         {
             RouteToLobbyScene();
@@ -367,6 +365,7 @@ public class SteamManager : MonoBehaviour
         }
 
         AddRemoteMember(friend);
+        SceneSyncManager.Instance?.AssignJoiningPlayer(friend.Id);
 
         if (autoStartWhenMinimumPeers &&
             currentLobby.Id.Value != 0 &&
@@ -614,6 +613,7 @@ public class SteamManager : MonoBehaviour
             }
 
             RemotePlayerLeft?.Invoke(steamId);
+            PlayerStateManager.Instance?.SetPlayerConnected(steamId, false);
             TryDespawnRemotePlayer(steamId);
         }
     }

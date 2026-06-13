@@ -27,12 +27,12 @@ public class GroundPlayerControl : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        Cursor.visible = false;
-        Cursor.lockState = CursorLockMode.Locked;
-
         if (playerLocked) {
             return;
         }
+
+        Cursor.visible = false;
+        Cursor.lockState = CursorLockMode.Locked;
 
         Movement();
         Rotation();
