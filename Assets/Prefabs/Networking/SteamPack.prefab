@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1411251398165649952}
+  - component: {fileID: 6014378791198234410}
   - component: {fileID: 3549309175554565782}
   - component: {fileID: 7202338266808824058}
   - component: {fileID: 2090319483482309890}
@@ -42,6 +43,26 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6014378791198234410
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2231938572761584968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f6c4c8d72d64b618c68c4c6e9aeb9be, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.SteamPackConfig
+  networkingConfiguration: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
+  gameFlowDefinition: {fileID: 11400000, guid: c1d5436cbfac14cfb80f75fffe7826dd, type: 2}
+  roleVisualProfile: {fileID: 11400000, guid: e7df7426f428142c19b070d477b20e40, type: 2}
+  remotePlayerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
+  matchmakingSceneName: Matchmaking
+  lobbySceneName: Lobby
+  groundControlSceneName: BaseStation
+  spaceStationSceneName: Satellite
 --- !u!114 &3549309175554565782
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -52,7 +73,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7dfa6acd5735e4054bb012b4ed4c800a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SteamManager
   gameAppId: 480
   gameSceneName: Lobby
@@ -74,7 +95,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a634b192b792043b786e244380eceb8a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkConnectionManager
   config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
   roleVisualProfile: {fileID: 11400000, guid: e7df7426f428142c19b070d477b20e40, type: 2}
@@ -91,7 +112,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b8fe3735ac2bb4234bee14d6344fc6da, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Sync.NetworkSyncManager
   debugLogging: 1
 --- !u!114 &2977847412604982697
@@ -104,7 +125,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e78186ebe5d682249b1ac03f2132a34b, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.PlayerStateManager
 --- !u!114 &-354346587164634655
 MonoBehaviour:
@@ -116,7 +137,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9238838b39ce4f428621adad4349d5f, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.State.SceneSyncManager
   config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
   sceneFlowController: {fileID: 5470187381370489128}
@@ -135,7 +156,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 04ca81f132f751349877925a11995836, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.VoiceSessionManager
   config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
   fallbackSpaceProximityRadius: 20
@@ -150,7 +171,7 @@ MonoBehaviour:
   m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3d57f717f696d40ccaa3eb1a67874e5b, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.GameFlowManager
   logDebug: 1
 --- !u!114 &9208811232495926739
@@ -163,7 +184,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 578e88ca0fa0249e6aa850dfbfad60df, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Debugging.NetworkDebugOverlay
   config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
   startEnabled: 1
@@ -178,7 +199,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1d3befe8d2604418caa9c3a44b7aba6d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.VoiceChatP2P
   config: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
   crossRolePTTKey: 16
@@ -196,7 +217,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dd7924351eac7438d8cf103040cbc0b3, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.SceneFlowController
   gameFlowDefinition: {fileID: 11400000, guid: c1d5436cbfac14cfb80f75fffe7826dd, type: 2}
   networkingConfiguration: {fileID: 11400000, guid: 45089742baef04d628c89f2a4187f961, type: 2}
@@ -215,7 +236,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 716b822329f0b457b9a5bac6e19b6a3d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Voice.SceneAudioAnchorManager
   rules:
   - localScene: 1

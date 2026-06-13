@@ -20,6 +20,7 @@ MonoBehaviour:
   remotePlayerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
   cleanupPlayersOnSceneChange: 1
   gameFlowDefinition: {fileID: 11400000, guid: c1d5436cbfac14cfb80f75fffe7826dd, type: 2}
+  matchmakingSceneName: Matchmaking
   lobbySceneName: Lobby
   groundControlSceneName: BaseStation
   spaceStationSceneName: Satellite

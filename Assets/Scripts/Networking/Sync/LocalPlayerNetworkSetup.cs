@@ -2,6 +2,8 @@ using UnityEngine;
 using Steamworks;
 using SatelliteGameJam.Networking.Identity;
 using SatelliteGameJam.Networking.Core;
+using SatelliteGameJam.Networking.Messages;
+using SatelliteGameJam.Networking.State;
 
 namespace SatelliteGameJam.Networking.Sync
 {
@@ -75,6 +77,20 @@ namespace SatelliteGameJam.Networking.Sync
             // This matches what NetworkConnectionManager.SpawnRemotePlayerFor does for remote players
             networkIdentity.SetNetworkId((uint)localSteamId.Value);
             networkIdentity.SetOwner(localSteamId);
+
+            var playerState = PlayerStateManager.Instance?.GetPlayerState(localSteamId);
+            var playerTag = GetComponent<NetworkPlayerTag>();
+            if (playerTag == null)
+            {
+                playerTag = gameObject.AddComponent<NetworkPlayerTag>();
+            }
+
+            playerTag.Configure(
+                localSteamId,
+                SteamManager.Instance.PlayerName,
+                NetworkPlayerKind.Local,
+                playerState?.Role ?? PlayerRole.None,
+                playerState?.Scene ?? NetworkSceneId.None);
 
             // Keep local player architecture aligned with remote player composition.
             if (GetComponent<PlayerAvatarComposition>() == null)

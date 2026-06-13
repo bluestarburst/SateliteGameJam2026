@@ -5,7 +5,6 @@ using TMPro;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
 using System.Collections.Generic;
-using System.Linq;
 using SatelliteGameJam.Networking.Core;
 
 // Displays members of the current lobby in a ScrollView
@@ -90,22 +89,13 @@ public class LobbyPlayersView : MonoBehaviour
         }
 
         if (SceneFlowController.Instance != null &&
-            !SceneFlowController.Instance.CanHostStartGame(out _))
+            !SceneFlowController.Instance.CanHostStartGame(out string reason))
         {
-            startButton.SetActive(false);
-            return;
-        }
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                Debug.Log(reason);
+            }
 
-        // need at least 2 players on different teams to start
-        var members = SteamManager.Instance.currentLobby.Members;
-        if (members.Any(m => PlayerStateManager.Instance.GetPlayerState(m.Id)?.Role == PlayerRole.SpaceStation) &&
-            members.Any(m => PlayerStateManager.Instance.GetPlayerState(m.Id)?.Role == PlayerRole.GroundControl))
-        {
-            startButton.SetActive(true);
-        }
-        else
-        {
-            Debug.Log("Cannot start game - all players must be on different teams.");
             startButton.SetActive(false);
             return;
         }

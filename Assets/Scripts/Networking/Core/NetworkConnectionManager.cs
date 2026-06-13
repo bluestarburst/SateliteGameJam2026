@@ -297,6 +297,20 @@ namespace SatelliteGameJam.Networking.Core
         var state = PlayerStateManager.Instance?.GetPlayerState(steamId);
         NetworkSceneId playerScene = state?.Scene ?? NetworkSceneId.None;
         PlayerRole playerRole = state?.Role ?? PlayerRole.None;
+
+        var playerTag = instance.GetComponent<NetworkPlayerTag>();
+        if (playerTag == null)
+        {
+            playerTag = instance.AddComponent<NetworkPlayerTag>();
+        }
+
+        playerTag.Configure(
+            steamId,
+            displayName,
+            NetworkPlayerKind.Remote,
+            playerRole,
+            playerScene);
+
         GameObject visualPrefab = roleVisualProfile != null ? roleVisualProfile.Resolve(playerRole, playerScene) : null;
         if (visualPrefab != null)
         {

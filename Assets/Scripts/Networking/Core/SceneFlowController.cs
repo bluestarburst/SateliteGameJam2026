@@ -25,7 +25,7 @@ namespace SatelliteGameJam.Networking.Core
         [Header("Debug")]
         [SerializeField] private bool verboseLogging = true;
 
-        public GameFlowDefinition Definition => gameFlowDefinition;
+        public GameFlowDefinition Definition => ResolveFlowDefinition();
 
         private void Awake()
         {
@@ -50,9 +50,10 @@ namespace SatelliteGameJam.Networking.Core
 
         public string ResolveSceneName(NetworkSceneId sceneId)
         {
-            if (gameFlowDefinition != null)
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition != null)
             {
-                if (gameFlowDefinition.TryGetSceneEntry(sceneId, out FlowSceneEntry entry))
+                if (flowDefinition.TryGetSceneEntry(sceneId, out FlowSceneEntry entry))
                 {
                     if (sceneId == NetworkSceneId.GroundControl || sceneId == NetworkSceneId.SpaceStation)
                     {
@@ -83,6 +84,8 @@ namespace SatelliteGameJam.Networking.Core
 
             switch (sceneId)
             {
+                case NetworkSceneId.Matchmaking:
+                    return fallbackMatchmakingSceneName;
                 case NetworkSceneId.Lobby:
                     return fallbackLobbySceneName;
                 case NetworkSceneId.GroundControl:
@@ -108,7 +111,8 @@ namespace SatelliteGameJam.Networking.Core
                 return true;
             }
 
-            if (gameFlowDefinition != null && gameFlowDefinition.TryGetSceneEntry(sceneId, out FlowSceneEntry entry))
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition != null && flowDefinition.TryGetSceneEntry(sceneId, out FlowSceneEntry entry))
             {
                 entry.onWillEnter?.Invoke();
             }
@@ -124,15 +128,17 @@ namespace SatelliteGameJam.Networking.Core
 
         public bool LoadLobbyScene()
         {
-            NetworkSceneId lobbyScene = gameFlowDefinition != null ? gameFlowDefinition.LobbyScene : NetworkSceneId.Lobby;
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            NetworkSceneId lobbyScene = flowDefinition != null ? flowDefinition.LobbyScene : NetworkSceneId.Lobby;
             return LoadSceneForLocal(lobbyScene);
         }
 
         public bool LoadMatchmakingScene()
         {
-            if (gameFlowDefinition != null && gameFlowDefinition.MatchmakingScene != NetworkSceneId.None)
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition != null && flowDefinition.MatchmakingScene != NetworkSceneId.None)
             {
-                return LoadSceneForLocal(gameFlowDefinition.MatchmakingScene);
+                return LoadSceneForLocal(flowDefinition.MatchmakingScene);
             }
 
             if (string.IsNullOrWhiteSpace(fallbackMatchmakingSceneName))
@@ -146,12 +152,13 @@ namespace SatelliteGameJam.Networking.Core
 
         public NetworkSceneId ResolveGameplaySceneForRole(PlayerRole role)
         {
-            if (gameFlowDefinition != null)
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition != null)
             {
                 NetworkSceneId fallback = role == PlayerRole.SpaceStation
                     ? NetworkSceneId.SpaceStation
                     : NetworkSceneId.GroundControl;
-                return gameFlowDefinition.ResolveSceneForRole(role, fallback);
+                return flowDefinition.ResolveSceneForRole(role, fallback);
             }
 
             return role == PlayerRole.SpaceStation
@@ -161,7 +168,8 @@ namespace SatelliteGameJam.Networking.Core
 
         public bool IsLobbyOrMatchmakingScene(string sceneName)
         {
-            if (gameFlowDefinition != null && gameFlowDefinition.TryGetSceneEntryByName(sceneName, out FlowSceneEntry entry))
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition != null && flowDefinition.TryGetSceneEntryByName(sceneName, out FlowSceneEntry entry))
             {
                 return entry.modeType == GameModeType.Lobby || entry.modeType == GameModeType.Matchmaking;
             }
@@ -179,6 +187,15 @@ namespace SatelliteGameJam.Networking.Core
                 return false;
             }
 
+            if (!IsLobbyScene(SceneManager.GetActiveScene().name))
+            {
+                reason = "Game can only start from the Lobby scene.";
+                return false;
+            }
+
+            bool hasGroundControl = false;
+            bool hasSpaceStation = false;
+
             foreach (var member in SteamManager.Instance.currentLobby.Members)
             {
                 PlayerState state = PlayerStateManager.Instance.GetPlayerState(member.Id);
@@ -187,6 +204,15 @@ namespace SatelliteGameJam.Networking.Core
                     reason = "Every player must pick a gameplay role before starting.";
                     return false;
                 }
+
+                hasGroundControl |= state.Role == PlayerRole.GroundControl;
+                hasSpaceStation |= state.Role == PlayerRole.SpaceStation;
+            }
+
+            if (!hasGroundControl || !hasSpaceStation)
+            {
+                reason = "At least one Ground Control player and one Space Station player are required.";
+                return false;
             }
 
             return true;
@@ -194,15 +220,37 @@ namespace SatelliteGameJam.Networking.Core
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            if (gameFlowDefinition == null)
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition == null)
             {
                 return;
             }
 
-            if (gameFlowDefinition.TryGetSceneEntryByName(scene.name, out FlowSceneEntry entry))
+            if (flowDefinition.TryGetSceneEntryByName(scene.name, out FlowSceneEntry entry))
             {
                 entry.onDidEnter?.Invoke();
             }
+        }
+
+        private bool IsLobbyScene(string sceneName)
+        {
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition != null && flowDefinition.TryGetSceneEntryByName(sceneName, out FlowSceneEntry entry))
+            {
+                return entry.modeType == GameModeType.Lobby;
+            }
+
+            return string.Equals(sceneName, fallbackLobbySceneName);
+        }
+
+        private GameFlowDefinition ResolveFlowDefinition()
+        {
+            if (gameFlowDefinition != null)
+            {
+                return gameFlowDefinition;
+            }
+
+            return networkingConfiguration != null ? networkingConfiguration.gameFlowDefinition : null;
         }
     }
 }

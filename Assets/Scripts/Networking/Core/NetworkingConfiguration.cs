@@ -42,6 +42,9 @@ namespace SatelliteGameJam.Networking.Core
         [Tooltip("Optional global game flow definition. When assigned, scene routing should resolve through this asset first.")]
         public GameFlowDefinition gameFlowDefinition;
 
+        [Tooltip("Name of the matchmaking scene")]
+        public string matchmakingSceneName = "Matchmaking";
+
         [Tooltip("Name of the lobby scene")]
         public string lobbySceneName = "Lobby";
         
@@ -185,6 +188,7 @@ namespace SatelliteGameJam.Networking.Core
 
             switch (sceneId)
             {
+                case Messages.NetworkSceneId.Matchmaking: return matchmakingSceneName;
                 case Messages.NetworkSceneId.Lobby: return lobbySceneName;
                 case Messages.NetworkSceneId.GroundControl: return groundControlSceneName;
                 case Messages.NetworkSceneId.SpaceStation: return spaceStationSceneName;
@@ -200,6 +204,11 @@ namespace SatelliteGameJam.Networking.Core
             if (autoSpawnPlayers && remotePlayerPrefab == null)
             {
                 Debug.LogWarning("[NetworkingConfiguration] autoSpawnPlayers is enabled but remotePlayerPrefab is not assigned!");
+            }
+
+            if (string.IsNullOrEmpty(matchmakingSceneName))
+            {
+                Debug.LogWarning("[NetworkingConfiguration] matchmakingSceneName is not set!");
             }
 
             if (string.IsNullOrEmpty(lobbySceneName))

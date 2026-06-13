@@ -186,16 +186,16 @@ namespace SatelliteGameJam.Networking.State
         {
             pendingAcks.Clear();
             if (SteamManager.Instance == null) return;
-            
+
             // Cancel any pending timeout checks
             CancelInvoke(nameof(CheckAckTimeout));
-            
+
             foreach (var m in SteamManager.Instance.currentLobby.Members)
             {
                 if (m.Id != SteamManager.Instance.PlayerSteamId)
                     pendingAcks.Add(m.Id);
             }
-            
+
             if (pendingAcks.Count > 0)
             {
                 Invoke(nameof(CheckAckTimeout), SceneChangeTimeout);
@@ -469,7 +469,7 @@ namespace SatelliteGameJam.Networking.State
             packet[offset++] = (byte)(((ushort)sceneId) >> 8);
             packet[offset++] = (byte)(((ushort)sceneId) & 0xFF);
             NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
-            
+
             if (logDebug) Debug.Log($"[SceneSync] Sent ack for scene {sceneId}");
         }
 
@@ -517,7 +517,7 @@ namespace SatelliteGameJam.Networking.State
                 {
                     Debug.Log($"[SceneSync] Ack from {who} for scene {sceneId}. Remaining: {pendingAcks.Count}");
                 }
-                
+
                 // All acks received - cancel timeout
                 if (pendingAcks.Count == 0)
                 {

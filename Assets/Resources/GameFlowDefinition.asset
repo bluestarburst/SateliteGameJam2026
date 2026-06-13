@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: GameFlowDefinition
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Networking.Core.GameFlowDefinition
   scenes:
+  - sceneId: 4
+    sceneName: Matchmaking
+    modeType: 1
+    allowedRoles:
+    onWillEnter:
+      m_PersistentCalls:
+        m_Calls: []
+    onDidEnter:
+      m_PersistentCalls:
+        m_Calls: []
   - sceneId: 1
     sceneName: Lobby
     modeType: 2
-    allowedRoles: 
+    allowedRoles:
     onWillEnter:
       m_PersistentCalls:
         m_Calls: []
@@ -26,7 +36,7 @@ MonoBehaviour:
   - sceneId: 2
     sceneName: BaseStation
     modeType: 3
-    allowedRoles: 
+    allowedRoles:
     onWillEnter:
       m_PersistentCalls:
         m_Calls: []
@@ -36,7 +46,7 @@ MonoBehaviour:
   - sceneId: 3
     sceneName: Satellite
     modeType: 3
-    allowedRoles: 
+    allowedRoles:
     onWillEnter:
       m_PersistentCalls:
         m_Calls: []
@@ -48,7 +58,7 @@ MonoBehaviour:
     targetScene: 2
   - role: 3
     targetScene: 3
-  matchmakingScene: 0
+  matchmakingScene: 4
   lobbyScene: 1
   devStartup:
     enabled: 0

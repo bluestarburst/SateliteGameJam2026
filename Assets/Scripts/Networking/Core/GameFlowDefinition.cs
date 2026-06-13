@@ -69,7 +69,7 @@ namespace SatelliteGameJam.Networking.Core
         [SerializeField] private List<RoleSceneRule> roleSceneRules = new List<RoleSceneRule>();
 
         [Header("Well Known Scenes")]
-        [SerializeField] private NetworkSceneId matchmakingScene = NetworkSceneId.None;
+        [SerializeField] private NetworkSceneId matchmakingScene = NetworkSceneId.Matchmaking;
         [SerializeField] private NetworkSceneId lobbyScene = NetworkSceneId.Lobby;
 
         [Header("Dev Startup")]

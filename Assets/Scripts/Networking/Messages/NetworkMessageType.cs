@@ -60,6 +60,7 @@ public enum PlayerRole : byte
         None = 0,
         Lobby = 1,
         GroundControl = 2,
-        SpaceStation = 3
+        SpaceStation = 3,
+        Matchmaking = 4
     }
 }
