@@ -7,9 +7,11 @@ public class FileCrateInteract : MonoBehaviour, IInteractable
     
     private bool isHeld = false;
     private Rigidbody rb;
+    private Collider cl;
 
     void Awake() {
         rb = GetComponent<Rigidbody>();
+        cl = GetComponent<Collider>();
     }
 
     void Start() {
@@ -24,6 +26,7 @@ public class FileCrateInteract : MonoBehaviour, IInteractable
         if (!isHeld) {
             rb.isKinematic = true;
             rb.useGravity = false;
+            cl.enabled = false;
 
             transform.SetParent(interactor.HoldPoint);
             transform.localPosition = Vector3.zero;
@@ -35,11 +38,18 @@ public class FileCrateInteract : MonoBehaviour, IInteractable
 
             rb.isKinematic = false;
             rb.useGravity = true;
+            cl.enabled = true;
 
             isHeld = false;
         }
         
         // Debug.Log("I'll leap into your arms");
+    }
+
+    public void Click(GroundPlayerInteractor interactor) {
+        if (folders == null) return;
+
+        folders[selectedFolder].SetOpen(!folders[selectedFolder].open, interactor);
     }
 
     public void OnScroll(GroundPlayerInteractor interactor, float vertical) {
@@ -55,6 +65,8 @@ public class FileCrateInteract : MonoBehaviour, IInteractable
     }
 
     void UpdateFolderVisuals() {
+        if (folders == null) return;
+
         for (int i = 0; i < folders.Length; i++) {
             folders[i].SetSelected(i == selectedFolder);
         }

@@ -36,4 +36,8 @@ public class TransmissionInteract : MonoBehaviour, IInteractable
     public void OnScroll(GroundPlayerInteractor interactor, float vertical) {
         //nothing
     }
+
+    public void Click(GroundPlayerInteractor interactor) {
+        //nothing
+    }
 }

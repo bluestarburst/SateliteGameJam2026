@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 
 interface IInteractable {
     public void Interact(GroundPlayerInteractor interactor);
+    public void Click(GroundPlayerInteractor interactor);
     public void OnScroll(GroundPlayerInteractor interactor, float vertical);
 }
 
@@ -10,6 +11,7 @@ public class GroundPlayerInteractor : MonoBehaviour
 {
     public InputActionReference InteractAction;
     public InputActionReference ScrollAction;
+    public InputActionReference ClickAction;
     public Transform InteractorSource;
     public Transform HoldPoint;
     public float InteractRange;
@@ -38,6 +40,21 @@ public class GroundPlayerInteractor : MonoBehaviour
                 if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
                     interactObj.Interact(this);
                     heldObject = interactObj;
+                }
+            }
+        }
+
+        if (ClickAction.action.WasPressedThisFrame()) {
+            if (heldObject != null) {
+                heldObject.Click(this);
+                return;
+            }
+
+            // Debug.Log("Click button pressed");
+            Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
+            if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
+                if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
+                    interactObj.Click(this);
                 }
             }
         }
