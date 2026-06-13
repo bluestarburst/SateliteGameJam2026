@@ -36,24 +36,24 @@ public class SpacePlayerControl : MonoBehaviour
         jumpAction.action.Disable();
     }
 
-    private bool canMove = false;
-    // don't enable rotation/movement until 1s after start
-    private void Start()
-    {
-        Invoke("EnableMovement", 1f);
-    }
+    // private bool canMove = false;
+    // // don't enable rotation/movement until 1s after start
+    // private void Start()
+    // {
+    //     Invoke("EnableMovement", 1f);
+    // }
 
-    private void EnableMovement()
-    {
-        canMove = true;
-    }
+    // private void EnableMovement()
+    // {
+    //     canMove = true;
+    // }
 
 
     void Update()
     {
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
-        if (!canMove) return;
+        // if (!canMove) return;
         Rotation();
         if (isGrounded)
         {
@@ -182,16 +182,21 @@ public class SpacePlayerControl : MonoBehaviour
 
     private Vector3 jumpXZDirection = Vector3.zero;
 
+    public Vector3 move;
+    public Vector2 input;
+
     public int groundCount = 1;
 
     public void InteriorMovement()
     {
 
-        Vector3 move;
+        // Vector3 move;
 
         if (isGrounded)
         {
-            Vector2 input = moveAction.action.ReadValue<Vector2>();
+            Debug.Log("reading movement input");
+            input = moveAction.action.ReadValue<Vector2>();
+            Debug.Log(input);
             move = new Vector3(input.x, 0, input.y);
             move = Vector3.ClampMagnitude(move, 1f);
             move = move * playerSpeed;

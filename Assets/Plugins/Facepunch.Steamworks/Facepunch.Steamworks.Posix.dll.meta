@@ -24,7 +24,7 @@ PluginImporter:
       settings:
         CPU: AnyCPU
         DefaultValueInitialized: true
-        OS: AnyOS
+        OS: Linux
     Linux64:
       enabled: 1
       settings:
