@@ -55,6 +55,11 @@ namespace SatelliteGameJam.Networking.Sync
 
     private void FixedUpdate()
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
         if (editorRequestAuthority)
         {
             RequestAuthority(SteamManager.Instance.PlayerSteamId);
@@ -96,7 +101,14 @@ namespace SatelliteGameJam.Networking.Sync
     private bool IsAuthority()
     {
         // Authority check
-        return currentAuthority == SteamManager.Instance.PlayerSteamId;
+        return SteamManager.Instance != null && currentAuthority == SteamManager.Instance.PlayerSteamId;
+    }
+
+    private bool HasNetworkRuntime()
+    {
+        return SteamManager.Instance != null
+            && SteamManager.Instance.PlayerSteamId.Value != 0
+            && NetworkConnectionManager.Instance != null;
     }
 
     /// <summary>
@@ -117,6 +129,11 @@ namespace SatelliteGameJam.Networking.Sync
     /// </summary>
     private void SendPhysicsState()
     {
+        if (NetworkConnectionManager.Instance == null)
+        {
+            return;
+        }
+
         // Packet: [Type(1)][NetId(4)][AuthSteamId(8)][Pos(12)][Rot(16)][Vel(12)][AngVel(12)]
         const int packetSize = 65;
         byte[] packet = new byte[packetSize];
@@ -152,6 +169,11 @@ namespace SatelliteGameJam.Networking.Sync
         int offset = 5;
 
         SteamId authSteamId = NetworkSerialization.ReadULong(data, ref offset);
+        if (sender != authSteamId)
+        {
+            return;
+        }
+
         currentAuthority = authSteamId;
 
         if (!IsAuthority())
@@ -193,7 +215,7 @@ namespace SatelliteGameJam.Networking.Sync
         }
         
         // Fallback: return local player if it's the local player's object
-        return SteamManager.Instance?.PlayerSteamId ?? default;
+        return SteamManager.Instance != null ? SteamManager.Instance.PlayerSteamId : default;
     }
 }
 }

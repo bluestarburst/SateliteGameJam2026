@@ -1,352 +1,437 @@
 using System.Collections.Generic;
-using Steamworks;
-using UnityEngine;
+using SatelliteGameJam.Networking.Core;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.State;
-using SatelliteGameJam.Networking.Core;
-using Steamworks.Data;
+using Steamworks;
+using UnityEngine;
 
 namespace SatelliteGameJam.Networking.Voice
 {
     /// <summary>
-    /// Manages voice routing and gating based on player roles, scenes, and proximity.
-    /// Attaches VoiceRemotePlayer components to avatars and controls AudioSource enable/volume.
-    /// Implements role-specific rules:
-    /// - Lobby: All players hear each other
-    /// - Ground Control: Only hear space when at console; always hear other ground players
-    /// - Space Station: Always hear ground; hear other space players within radius
+    /// Authoritative player-to-audio mapping for incoming remote voice playback.
     /// </summary>
     public class VoiceSessionManager : MonoBehaviour
-{
-    public static VoiceSessionManager Instance { get; private set; }
-
-    [Header("Voice Rules")]
-    [SerializeField] private float spaceProximityRadius = 20f; // Distance for space-to-space voice
-    [SerializeField] private bool enableDebugLogs = false;
-    [SerializeField] private string LobbyScene = "Lobby"; // Toggle for testing
-
-    // Console interaction tracking
-    private readonly HashSet<SteamId> playersAtConsole = new();
-
-    // Remote player tracking (avatar GameObjects)
-    private readonly Dictionary<SteamId, GameObject> remotePlayerAvatars = new();
-    private readonly Dictionary<SteamId, VoiceRemotePlayer> voiceRemotePlayers = new();
-
-    // Local player state
-    private bool isLocalPlayerAtConsole = false;
-
-    /// <summary>
-    /// Public accessor for console state (used by VoiceChatP2P for send gating).
-    /// </summary>
-    public bool IsLocalPlayerAtConsole => isLocalPlayerAtConsole;
-
-    private void Awake()
     {
-        if (Instance != null && Instance != this)
+        private class VoiceBinding
         {
-            Destroy(gameObject);
-            return;
+            public GameObject HostObject;
+            public GameObject Avatar;
+            public VoiceRemotePlayer VoicePlayer;
+            public bool IsProxy;
         }
 
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
+        public static VoiceSessionManager Instance { get; private set; }
 
-        // Register handler for console interaction broadcasts
-        if (NetworkConnectionManager.Instance != null)
+        [Header("Voice Rules")]
+        [HideInInspector]
+        [SerializeField] private NetworkingConfiguration config;
+        [SerializeField] private float fallbackSpaceProximityRadius = 20f;
+        [SerializeField] private bool enableDebugLogs;
+
+        private readonly HashSet<SteamId> playersAtConsole = new HashSet<SteamId>();
+        private readonly Dictionary<SteamId, VoiceBinding> bindings = new Dictionary<SteamId, VoiceBinding>();
+
+        private bool isLocalPlayerAtConsole;
+        private bool consoleHandlerRegistered;
+
+        public bool IsLocalPlayerAtConsole => isLocalPlayerAtConsole;
+        private float SpaceProximityRadius => config != null ? config.proximityVoiceDistance : fallbackSpaceProximityRadius;
+        private bool VoiceEnabled => config == null || config.voiceChatEnabled;
+        private bool UseRoleGating => config == null || config.useRoleBasedVoiceGating;
+
+        private void Awake()
         {
-            NetworkConnectionManager.Instance.RegisterHandler(
-                NetworkMessageType.ConsoleInteraction, OnReceiveConsoleInteraction);
-        }
-
-        // Subscribe to player state events
-        if (PlayerStateManager.Instance != null)
-        {
-            PlayerStateManager.Instance.OnPlayerJoined += OnPlayerJoined;
-            PlayerStateManager.Instance.OnPlayerLeft += OnPlayerLeft;
-            PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
-        }
-    }
-
-    private void Update()
-    {
-        // Apply voice gating rules every frame based on current state
-        ApplyVoiceGating();
-    }
-
-    // ===== Public API =====
-
-    /// <summary>
-    /// Registers a remote player avatar for voice playback.
-    /// VoiceRemotePlayer will be attached to this GameObject for positional audio.
-    /// </summary>
-    public void RegisterRemotePlayerAvatar(SteamId steamId, GameObject avatar)
-    {
-        if (avatar == null)
-        {
-            Debug.LogWarning($"[VoiceSessionManager] Tried to register null avatar for {steamId}");
-            return;
-        }
-
-        remotePlayerAvatars[steamId] = avatar;
-
-        // Attach VoiceRemotePlayer if not already present
-        if (!voiceRemotePlayers.ContainsKey(steamId))
-        {
-            var voicePlayer = avatar.GetComponent<VoiceRemotePlayer>();
-            if (voicePlayer == null)
+            if (Instance != null && Instance != this)
             {
-                voicePlayer = avatar.AddComponent<VoiceRemotePlayer>();
-                voicePlayer.Initialize(steamId);
+                Destroy(gameObject);
+                return;
             }
-            voiceRemotePlayers[steamId] = voicePlayer;
+
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            RegisterConsoleHandlerWhenReady();
+
+            if (PlayerStateManager.Instance != null)
+            {
+                PlayerStateManager.Instance.OnPlayerLeft += OnPlayerLeft;
+                PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+            }
         }
 
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Registered avatar for {steamId}");
-    }
-
-    /// <summary>
-    /// Unregisters and cleans up a remote player's voice components.
-    /// </summary>
-    public void UnregisterRemotePlayer(SteamId steamId)
-    {
-        if (voiceRemotePlayers.TryGetValue(steamId, out var voicePlayer))
+        private void RegisterConsoleHandlerWhenReady()
         {
-            if (voicePlayer != null)
-                Destroy(voicePlayer);
-            voiceRemotePlayers.Remove(steamId);
+            if (consoleHandlerRegistered)
+            {
+                return;
+            }
+
+            if (NetworkConnectionManager.Instance == null)
+            {
+                Invoke(nameof(RegisterConsoleHandlerWhenReady), 0.5f);
+                return;
+            }
+
+            NetworkConnectionManager.Instance.RegisterHandler(NetworkMessageType.ConsoleInteraction, OnReceiveConsoleInteraction);
+            consoleHandlerRegistered = true;
         }
 
-        remotePlayerAvatars.Remove(steamId);
+        private void OnDestroy()
+        {
+            CancelInvoke(nameof(RegisterConsoleHandlerWhenReady));
 
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Unregistered player {steamId}");
-    }
+            if (NetworkConnectionManager.Instance != null && consoleHandlerRegistered)
+            {
+                NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.ConsoleInteraction, OnReceiveConsoleInteraction);
+            }
 
-    /// <summary>
-    /// Marks the local player as interacting with a console (for ground control voice gating).
-    /// Broadcasts this state to all peers.
-    /// </summary>
-    public void SetLocalPlayerAtConsole(bool atConsole)
-    {
-        isLocalPlayerAtConsole = atConsole;
-        
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Local player at console: {atConsole}");
-        
-        // Broadcast console interaction state to all peers
-        BroadcastConsoleInteraction(atConsole);
-    }
+            if (PlayerStateManager.Instance != null)
+            {
+                PlayerStateManager.Instance.OnPlayerLeft -= OnPlayerLeft;
+                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
+            }
+        }
 
-    /// <summary>
-    /// Broadcasts the local player's console interaction state to all peers.
-    /// </summary>
-    private void BroadcastConsoleInteraction(bool atConsole)
-    {
-        if (NetworkConnectionManager.Instance == null) return;
+        private void Update()
+        {
+            ApplyVoiceGating();
+        }
 
-        byte[] packet = new byte[10]; // 1 (type) + 8 (steamId) + 1 (atConsole)
-        int offset = 0;
+        public void RegisterRemotePlayerAvatar(SteamId steamId, GameObject avatar)
+        {
+            if (avatar == null)
+            {
+                Debug.LogWarning($"[VoiceSessionManager] Tried to register null avatar for {steamId}");
+                return;
+            }
 
-        packet[offset++] = (byte)NetworkMessageType.ConsoleInteraction;
-        NetworkSerialization.WriteULong(packet, ref offset, SteamManager.Instance.PlayerSteamId);
-        packet[offset++] = (byte)(atConsole ? 1 : 0);
+            VoiceBinding binding = GetOrCreateBinding(steamId);
+            binding.Avatar = avatar;
 
-        // Send to all peers reliably
-        NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
+            VoiceRemotePlayer avatarPlayer = avatar.GetComponent<VoiceRemotePlayer>();
+            if (avatarPlayer == null)
+            {
+                avatarPlayer = avatar.AddComponent<VoiceRemotePlayer>();
+            }
 
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Broadcast console interaction: {atConsole}");
-    }
+            if (!avatarPlayer.IsInitialized)
+            {
+                avatarPlayer.Initialize(steamId);
+            }
 
-    /// <summary>
-    /// Handles received console interaction state from remote players.
-    /// </summary>
-    private void OnReceiveConsoleInteraction(SteamId sender, byte[] data)
-    {
-        if (data == null || data.Length < 10) return;
+            if (binding.IsProxy)
+            {
+                // Migrate from fallback proxy to avatar-bound playback.
+                if (binding.HostObject != null)
+                {
+                    Destroy(binding.HostObject);
+                }
 
-        int offset = 1; // Skip message type
-        SteamId playerSteamId = NetworkSerialization.ReadULong(data, ref offset);
-        bool atConsole = data[offset] == 1;
+                binding.HostObject = avatar;
+                binding.IsProxy = false;
+                binding.VoicePlayer = avatarPlayer;
+            }
+            else
+            {
+                binding.HostObject = avatar;
+                binding.VoicePlayer = avatarPlayer;
+            }
 
-        SetRemotePlayerAtConsole(playerSteamId, atConsole);
+            ApplyAnchor(steamId, binding);
 
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Received console interaction from {playerSteamId}: {atConsole}");
-    }
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[VoiceSessionManager] Registered avatar voice binding for {steamId}");
+            }
+        }
 
-    /// <summary>
-    /// Marks a remote player as interacting with a console (optional for future use).
-    /// </summary>
-    public void SetRemotePlayerAtConsole(SteamId steamId, bool atConsole)
-    {
-        if (atConsole)
-            playersAtConsole.Add(steamId);
-        else
+        public void UnregisterRemotePlayer(SteamId steamId)
+        {
+            if (!bindings.TryGetValue(steamId, out VoiceBinding binding))
+            {
+                return;
+            }
+
+            if (binding.IsProxy && binding.HostObject != null)
+            {
+                Destroy(binding.HostObject);
+            }
+            else if (!binding.IsProxy && binding.VoicePlayer != null && binding.Avatar != null)
+            {
+                Destroy(binding.VoicePlayer);
+            }
+
+            bindings.Remove(steamId);
             playersAtConsole.Remove(steamId);
-    }
 
-    /// <summary>
-    /// Gets the VoiceRemotePlayer for a specific sender (used by VoiceChatP2P).
-    /// Creates one with a fallback proxy GameObject if avatar not yet registered.
-    /// </summary>
-    public VoiceRemotePlayer GetOrCreateVoiceRemotePlayer(SteamId steamId)
-    {
-        if (voiceRemotePlayers.TryGetValue(steamId, out var existing))
-            return existing;
-
-        // Create fallback proxy if no avatar registered yet
-        GameObject proxy = new GameObject($"VoiceProxy_{steamId}");
-        DontDestroyOnLoad(proxy);
-        
-        var voicePlayer = proxy.AddComponent<VoiceRemotePlayer>();
-        voicePlayer.Initialize(steamId);
-        voiceRemotePlayers[steamId] = voicePlayer;
-
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Created fallback voice proxy for {steamId}");
-
-        return voicePlayer;
-    }
-
-    // ===== Voice Gating Logic =====
-
-    /// <summary>
-    /// Applies role-based voice gating rules to all remote players.
-    /// </summary>
-    private void ApplyVoiceGating()
-    {
-        if (PlayerStateManager.Instance == null) return;
-
-        SteamId localId = SteamManager.Instance.PlayerSteamId;
-        PlayerState localState = PlayerStateManager.Instance.GetPlayerState(localId);
-
-        foreach (var kvp in voiceRemotePlayers)
-        {
-            SteamId remoteSteamId = kvp.Key;
-            VoiceRemotePlayer voicePlayer = kvp.Value;
-
-            if (voicePlayer == null) continue;
-
-            PlayerState remoteState = PlayerStateManager.Instance.GetPlayerState(remoteSteamId);
-
-            bool shouldHear = localState.Scene == NetworkSceneId.Lobby || ShouldHearPlayer(localState, remoteState, remoteSteamId);
-            
-            // Control AudioSource enabled state
-            AudioSource audioSource = voicePlayer.GetComponent<AudioSource>();
-            if (audioSource != null)
+            if (enableDebugLogs)
             {
-                audioSource.enabled = shouldHear;
+                Debug.Log($"[VoiceSessionManager] Unregistered player {steamId}");
+            }
+        }
+
+        /// <summary>Disposes all lobby-specific voice playback before changing lobbies.</summary>
+        public void ResetForLobbyTransition()
+        {
+            foreach (SteamId steamId in new List<SteamId>(bindings.Keys))
+            {
+                UnregisterRemotePlayer(steamId);
+            }
+
+            playersAtConsole.Clear();
+            isLocalPlayerAtConsole = false;
+        }
+
+        public VoiceRemotePlayer GetOrCreateVoiceRemotePlayer(SteamId steamId)
+        {
+            VoiceBinding binding = GetOrCreateBinding(steamId);
+            return binding.VoicePlayer;
+        }
+
+        public void SetLocalPlayerAtConsole(bool atConsole)
+        {
+            isLocalPlayerAtConsole = atConsole;
+            BroadcastConsoleInteraction(atConsole);
+
+            foreach (KeyValuePair<SteamId, VoiceBinding> kvp in bindings)
+            {
+                ApplyAnchor(kvp.Key, kvp.Value);
+            }
+        }
+
+        public void SetRemotePlayerAtConsole(SteamId steamId, bool atConsole)
+        {
+            if (atConsole)
+            {
+                playersAtConsole.Add(steamId);
+            }
+            else
+            {
+                playersAtConsole.Remove(steamId);
+            }
+        }
+
+        public bool IsWithinProximityForSending(SteamId remoteSteamId)
+        {
+            return IsWithinProximity(remoteSteamId);
+        }
+
+        private VoiceBinding GetOrCreateBinding(SteamId steamId)
+        {
+            if (bindings.TryGetValue(steamId, out VoiceBinding existing))
+            {
+                if (existing.VoicePlayer == null)
+                {
+                    existing.VoicePlayer = existing.HostObject != null
+                        ? existing.HostObject.GetComponent<VoiceRemotePlayer>()
+                        : null;
+                }
+
+                return existing;
+            }
+
+            var proxy = new GameObject($"VoiceProxy_{steamId}");
+            DontDestroyOnLoad(proxy);
+
+            var voicePlayer = proxy.AddComponent<VoiceRemotePlayer>();
+            voicePlayer.Initialize(steamId);
+
+            var binding = new VoiceBinding
+            {
+                HostObject = proxy,
+                Avatar = null,
+                VoicePlayer = voicePlayer,
+                IsProxy = true
+            };
+
+            bindings[steamId] = binding;
+            ApplyAnchor(steamId, binding);
+            return binding;
+        }
+
+        private void ApplyVoiceGating()
+        {
+            if (!VoiceEnabled || PlayerStateManager.Instance == null || SteamManager.Instance == null)
+            {
+                return;
+            }
+
+            SteamId localId = SteamManager.Instance.PlayerSteamId;
+            PlayerState localState = PlayerStateManager.Instance.GetPlayerState(localId);
+
+            foreach (KeyValuePair<SteamId, VoiceBinding> kvp in bindings)
+            {
+                SteamId remoteSteamId = kvp.Key;
+                VoiceBinding binding = kvp.Value;
+                if (binding == null || binding.VoicePlayer == null)
+                {
+                    continue;
+                }
+
+                PlayerState remoteState = PlayerStateManager.Instance.GetPlayerState(remoteSteamId);
+                bool shouldHear = !UseRoleGating || localState.Scene == NetworkSceneId.Lobby || ShouldHearPlayer(localState, remoteState, remoteSteamId);
+                AudioSource source = binding.VoicePlayer.GetComponent<AudioSource>();
+                if (source != null)
+                {
+                    source.enabled = shouldHear;
+                }
+            }
+        }
+
+        private bool ShouldHearPlayer(PlayerState localState, PlayerState remoteState, SteamId remoteSteamId)
+        {
+            if (localState.Role == PlayerRole.Lobby)
+            {
+                return true;
+            }
+
+            if (localState.Role == PlayerRole.GroundControl)
+            {
+                if (remoteState.Role == PlayerRole.GroundControl)
+                {
+                    return true;
+                }
+
+                if (remoteState.Role == PlayerRole.SpaceStation)
+                {
+                    return isLocalPlayerAtConsole;
+                }
+
+                return false;
+            }
+
+            if (localState.Role == PlayerRole.SpaceStation)
+            {
+                if (remoteState.Role == PlayerRole.GroundControl)
+                {
+                    return true;
+                }
+
+                if (remoteState.Role == PlayerRole.SpaceStation)
+                {
+                    return IsWithinProximity(remoteSteamId);
+                }
+
+                return false;
+            }
+
+            return false;
+        }
+
+        private bool IsWithinProximity(SteamId remoteSteamId)
+        {
+            if (!bindings.TryGetValue(remoteSteamId, out VoiceBinding binding) || binding.Avatar == null)
+            {
+                return false;
+            }
+
+            GameObject localAvatar = FindLocalPlayerAvatar();
+            if (localAvatar == null)
+            {
+                return true;
+            }
+
+            float distance = Vector3.Distance(localAvatar.transform.position, binding.Avatar.transform.position);
+            return distance <= SpaceProximityRadius;
+        }
+
+        private GameObject FindLocalPlayerAvatar()
+        {
+            if (SteamManager.Instance == null)
+            {
+                return null;
+            }
+
+            var allIdentities = FindObjectsByType<SatelliteGameJam.Networking.Identity.NetworkIdentity>(FindObjectsSortMode.None);
+            foreach (var identity in allIdentities)
+            {
+                if (identity.OwnerSteamId == SteamManager.Instance.PlayerSteamId)
+                {
+                    return identity.gameObject;
+                }
+            }
+
+            return null;
+        }
+
+        private void BroadcastConsoleInteraction(bool atConsole)
+        {
+            if (NetworkConnectionManager.Instance == null || SteamManager.Instance == null)
+            {
+                return;
+            }
+
+            byte[] packet = new byte[10];
+            int offset = 0;
+            packet[offset++] = (byte)NetworkMessageType.ConsoleInteraction;
+            NetworkSerialization.WriteULong(packet, ref offset, SteamManager.Instance.PlayerSteamId);
+            packet[offset] = (byte)(atConsole ? 1 : 0);
+            NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
+        }
+
+        private void OnReceiveConsoleInteraction(SteamId sender, byte[] data)
+        {
+            if (data == null || data.Length < 10)
+            {
+                return;
+            }
+
+            int offset = 1;
+            SteamId playerSteamId = NetworkSerialization.ReadULong(data, ref offset);
+            bool atConsole = data[offset] == 1;
+            SetRemotePlayerAtConsole(playerSteamId, atConsole);
+        }
+
+        private void OnPlayerLeft(SteamId steamId)
+        {
+            UnregisterRemotePlayer(steamId);
+        }
+
+        private void OnPlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
+        {
+            if (bindings.TryGetValue(steamId, out VoiceBinding binding))
+            {
+                ApplyAnchor(steamId, binding);
+            }
+        }
+
+        private void ApplyAnchor(SteamId steamId, VoiceBinding binding)
+        {
+            if (binding == null || binding.VoicePlayer == null)
+            {
+                return;
+            }
+
+            AudioSource source = binding.VoicePlayer.GetComponent<AudioSource>();
+            if (source == null)
+            {
+                return;
+            }
+
+            if (SceneAudioAnchorManager.Instance != null)
+            {
+                SceneAudioAnchorManager.Instance.ApplyAnchor(
+                    steamId,
+                    binding.VoicePlayer.gameObject,
+                    source,
+                    binding.Avatar,
+                    isLocalPlayerAtConsole);
+                return;
+            }
+
+            // Safe fallback when no SceneAudioAnchorManager is present:
+            // proxy-only lobby players should be audible without requiring
+            // world-space avatar anchors.
+            if (binding.Avatar != null)
+            {
+                binding.VoicePlayer.transform.SetParent(binding.Avatar.transform, false);
+                source.spatialBlend = 1f;
+            }
+            else
+            {
+                binding.VoicePlayer.transform.SetParent(null, false);
+                source.spatialBlend = 0f;
             }
         }
     }
-
-    /// <summary>
-    /// Determines if the local player should hear a remote player based on roles and rules.
-    /// </summary>
-    private bool ShouldHearPlayer(PlayerState localState, PlayerState remoteState, SteamId remoteSteamId)
-    {
-        // Lobby: Everyone hears everyone
-        if (localState.Role == PlayerRole.Lobby)
-            return true;
-
-        // Ground Control rules
-        if (localState.Role == PlayerRole.GroundControl)
-        {
-            // Always hear other ground control players
-            if (remoteState.Role == PlayerRole.GroundControl)
-                return true;
-
-            // Only hear space players when at console
-            if (remoteState.Role == PlayerRole.SpaceStation)
-                return isLocalPlayerAtConsole;
-
-            return false;
-        }
-
-        // Space Station rules
-        if (localState.Role == PlayerRole.SpaceStation)
-        {
-            // Always hear ground control
-            if (remoteState.Role == PlayerRole.GroundControl)
-                return true;
-
-            // Hear other space players within proximity
-            if (remoteState.Role == PlayerRole.SpaceStation)
-            {
-                return IsWithinProximity(remoteSteamId);
-            }
-
-            return false;
-        }
-
-        // Default: don't hear
-        return false;
-    }
-
-    /// <summary>
-    /// Public method to check proximity for voice SENDING (used by VoiceChatP2P).
-    /// </summary>
-    public bool IsWithinProximityForSending(SteamId remoteSteamId)
-    {
-        return IsWithinProximity(remoteSteamId);
-    }
-
-    /// <summary>
-    /// Checks if a remote player is within voice proximity (for space-to-space).
-    /// </summary>
-    private bool IsWithinProximity(SteamId remoteSteamId)
-    {
-        // Try to find the remote player's avatar position
-        if (!remotePlayerAvatars.TryGetValue(remoteSteamId, out var remoteAvatar))
-            return false;
-
-        if (remoteAvatar == null)
-            return false;
-
-        // Find local player position (you'll need a reference to the local player object)
-        GameObject localPlayer = FindLocalPlayerAvatar();
-        if (localPlayer == null)
-            return true; // If we can't find local player, allow voice by default
-
-        float distance = Vector3.Distance(localPlayer.transform.position, remoteAvatar.transform.position);
-        return distance <= spaceProximityRadius;
-    }
-
-    /// <summary>
-    /// Finds the local player's avatar GameObject. Customize based on your player setup.
-    /// </summary>
-    private GameObject FindLocalPlayerAvatar()
-    {
-        // TODO: Replace with actual local player reference
-        // Example: return PlayerController.Instance?.gameObject;
-        GameObject localPlayer = GameObject.FindGameObjectWithTag("Player");
-        return localPlayer;
-    }
-
-    // ===== Event Handlers =====
-
-    private void OnPlayerJoined(SteamId steamId)
-    {
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Player joined: {steamId}");
-        
-        // VoiceRemotePlayer will be created on-demand when voice data arrives
-        // or when avatar is registered
-    }
-
-    private void OnPlayerLeft(SteamId steamId)
-    {
-        UnregisterRemotePlayer(steamId);
-    }
-
-    private void OnPlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
-    {
-        if (enableDebugLogs)
-            Debug.Log($"[VoiceSessionManager] Player {steamId} changed scene to {sceneId}");
-        
-        // Re-evaluate voice gating on next frame
-    }
-}
 }

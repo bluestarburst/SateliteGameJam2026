@@ -10,6 +10,7 @@ using UnityEngine.SceneManagement;
 using SatelliteGameJam.Networking.Core;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
+using SatelliteGameJam.Networking.Voice;
 
 /// <summary>
 /// Steamworks entry point that mirrors the Facepunch Steamworks tutorial core loop.
@@ -19,15 +20,6 @@ public class SteamManager : MonoBehaviour
 {
     public static SteamManager Instance;
 
-    [Header("Steam Config")]
-    [Tooltip("Replace with your own Steam App ID before shipping.")]
-    [SerializeField] private uint gameAppId = 480; // Spacewar default for local testing
-
-    [Header("Scenes & Flow")]
-    [Tooltip("Optional scene to load when a lobby is ready.")]
-    [SerializeField] private string gameSceneName = string.Empty;
-    [SerializeField] private bool autoCreateLobbyForTesting = false;
-    
     private int playerElo = 0;
 
     public string PlayerName { get; private set; } = string.Empty;
@@ -51,6 +43,10 @@ public class SteamManager : MonoBehaviour
     public List<Lobby> activeRankedLobbies = new();
     public Lobby currentLobby;
     private Lobby hostedMultiplayerLobby;
+    private ulong authorityLobbyId;
+    private SteamId lobbyHostId;
+    private bool isLobbyTransitionInProgress;
+    private ulong pendingLobbyId;
 
     // Socket state
     private SteamSocketManager steamSocketManager;
@@ -70,6 +66,8 @@ public class SteamManager : MonoBehaviour
 
     private bool applicationHasQuit;
     private bool theRealOne;
+
+    public bool IsDevelopmentSessionActive { get; private set; }
 
     public void Awake()
     {
@@ -92,7 +90,7 @@ public class SteamManager : MonoBehaviour
     {
         try
         {
-            SteamClient.Init(gameAppId, true);
+            SteamClient.Init(GetSteamAppId(), true);
             if (!SteamClient.IsValid)
             {
                 Debug.Log("Steam client not valid");
@@ -118,7 +116,7 @@ public class SteamManager : MonoBehaviour
         Debug.Log("Attempting to reconnect to Steam");
         try
         {
-            SteamClient.Init(gameAppId, true);
+            SteamClient.Init(GetSteamAppId(), true);
             if (!SteamClient.IsValid)
             {
                 Debug.Log("Steam client not valid");
@@ -146,6 +144,11 @@ public class SteamManager : MonoBehaviour
         return SteamClient.IsValid;
     }
 
+    private uint GetSteamAppId()
+    {
+        return NetworkingConfiguration.Instance?.steamAppId ?? 480;
+    }
+
     private void Start()
     {
         SteamMatchmaking.OnLobbyGameCreated += OnLobbyGameCreatedCallback;
@@ -161,10 +164,7 @@ public class SteamManager : MonoBehaviour
 
         UpdateRichPresenceStatus(SceneManager.GetActiveScene().name);
 
-        if (autoCreateLobbyForTesting)
-        {
-            CreateLobby(0);
-        }
+        RunDevelopmentSession();
     }
 
     private void Update()
@@ -233,13 +233,13 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyMemberDisconnectedCallback(Lobby lobby, Friend friend)
     {
-        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
+        if (!ShouldAcceptLobbyCallback(lobby)) return;
         OtherLobbyMemberLeft(friend);
     }
 
     private void OnLobbyMemberLeaveCallback(Lobby lobby, Friend friend)
     {
-        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
+        if (!ShouldAcceptLobbyCallback(lobby)) return;
         OtherLobbyMemberLeft(friend);
     }
 
@@ -256,10 +256,16 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyGameCreatedCallback(Lobby lobby, uint ip, ushort port, SteamId steamId)
     {
-        SyncRemoteMembersWithLobby(lobby);
-        if (!string.IsNullOrEmpty(gameSceneName))
+        if (!ShouldAcceptLobbyCallback(lobby))
         {
-            SceneManager.LoadScene(gameSceneName);
+            return;
+        }
+
+        CaptureLobbyHost(lobby);
+        SyncRemoteMembersWithLobby(lobby);
+        if (ShouldRouteToLobbyFromSteamEvent())
+        {
+            RouteToLobbyScene();
         }
     }
 
@@ -284,50 +290,28 @@ public class SteamManager : MonoBehaviour
 
         Debug.Log("incoming chat message");
         Debug.Log(message);
-        lobby.SetJoinable(false);
-        lobby.SetGameServer(PlayerSteamId);
     }
 
     private void OnLobbyEnteredCallback(Lobby lobby)
     {
-        SyncRemoteMembersWithLobby(lobby);
-
-        if (lobby.MemberCount != 1 && !string.IsNullOrEmpty(gameSceneName))
+        if (!ShouldAcceptLobbyCallback(lobby))
         {
-            SceneManager.LoadScene(gameSceneName);
+            return;
+        }
+
+        ActivateLobby(lobby, forceLobbyRoute: false);
+
+        // An invite join waits for the host's PlayerSceneState assignment. Loading Lobby here
+        // can finish after that assignment and overwrite the authoritative gameplay scene.
+        if (!isLobbyTransitionInProgress && lobby.MemberCount != 1 && ShouldRouteToLobbyFromSteamEvent())
+        {
+            RouteToLobbyScene();
         }
     }
 
     private async void OnGameLobbyJoinRequestedCallback(Lobby joinedLobby, SteamId id)
     {
-        RoomEnter joinedLobbySuccess = await joinedLobby.Join();
-        if (joinedLobbySuccess != RoomEnter.Success)
-        {
-            Debug.Log("failed to join lobby");
-            return;
-        }
-
-        foreach (Friend friend in SteamFriends.GetFriends())
-        {
-            if (friend.Id == id)
-            {
-                lobbyPartner = friend;
-                break;
-            }
-        }
-
-        foreach (var remote in remoteMembers.Keys.ToList())
-        {
-            RemoveRemoteMember(remote);
-        }
-        remoteMembers.Clear();
-
-        currentLobby = joinedLobby;
-        SyncRemoteMembersWithLobby(joinedLobby);
-        if (!string.IsNullOrEmpty(gameSceneName))
-        {
-            SceneManager.LoadScene(gameSceneName);
-        }
+        await JoinLobbyAsync(joinedLobby, id);
     }
 
     private void OnLobbyCreatedCallback(Result result, Lobby lobby)
@@ -342,13 +326,14 @@ public class SteamManager : MonoBehaviour
     private void OnLobbyMemberJoinedCallback(Lobby lobby, Friend friend)
     {
         Debug.Log("someone else joined lobby");
-        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
+        if (!ShouldAcceptLobbyCallback(lobby)) return;
         if (friend.Id == PlayerSteamId)
         {
             return;
         }
 
         AddRemoteMember(friend);
+        SceneSyncManager.Instance?.AssignJoiningPlayer(friend.Id);
     }
 
     private void OnDlcInstalledCallback(AppId appId)
@@ -398,9 +383,14 @@ public class SteamManager : MonoBehaviour
 
     public void LeaveLobby()
     {
+        ResetSessionForLobbyTransition();
+
         try
         {
-            currentLobby.Leave();
+            if (currentLobby.Id.Value != 0)
+            {
+                currentLobby.Leave();
+            }
         }
         catch
         {
@@ -412,6 +402,70 @@ public class SteamManager : MonoBehaviour
             RemoveRemoteMember(remote);
         }
         remoteMembers.Clear();
+        currentLobby = default;
+        hostedMultiplayerLobby = default;
+        authorityLobbyId = 0;
+        lobbyHostId = 0;
+        isHost = false;
+        IsDevelopmentSessionActive = false;
+        PlayerStateManager.Instance?.ResetForLobbyTransition();
+    }
+
+    /// <summary>
+    /// Leaves any current lobby, clears lobby-owned runtime state, then joins the requested lobby.
+    /// Steam invite callbacks and lobby-browser clicks both use this path.
+    /// </summary>
+    public async Task<bool> JoinLobbyAsync(Lobby lobby, SteamId inviter = default)
+    {
+        if (!ConnectedToSteam())
+        {
+            Debug.LogWarning("[SteamManager] Cannot join a lobby because Steam is not available.");
+            return false;
+        }
+
+        if (lobby.Id.Value == 0)
+        {
+            Debug.LogWarning("[SteamManager] Cannot join an invalid lobby.");
+            return false;
+        }
+
+        if (isLobbyTransitionInProgress)
+        {
+            Debug.LogWarning("[SteamManager] A lobby transition is already in progress.");
+            return false;
+        }
+
+        if (HasActiveLobby && currentLobby.Id == lobby.Id)
+        {
+            ActivateLobby(lobby, forceLobbyRoute: false, inviter);
+            return true;
+        }
+
+        isLobbyTransitionInProgress = true;
+        pendingLobbyId = lobby.Id.Value;
+        try
+        {
+            LeaveLobby();
+            isLobbyTransitionInProgress = true;
+
+            RoomEnter result = await lobby.Join();
+            if (result != RoomEnter.Success)
+            {
+                Debug.LogWarning($"[SteamManager] Failed to join lobby {lobby.Id}: {result}");
+                return false;
+            }
+
+            // SceneSyncManager receives the host's role/scene assignment after the lobby join.
+            // Do not load Lobby as an intermediate scene; it can overwrite that assignment.
+            ActivateLobby(lobby, forceLobbyRoute: false, inviter);
+            Debug.Log($"[SteamManager] Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}.");
+            return true;
+        }
+        finally
+        {
+            pendingLobbyId = 0;
+            isLobbyTransitionInProgress = false;
+        }
     }
 
     public async Task<bool> CreateFriendLobby(int maxPlayers = 4)
@@ -431,7 +485,9 @@ public class SteamManager : MonoBehaviour
             hostedMultiplayerLobby.SetFriendsOnly();
 
             currentLobby = hostedMultiplayerLobby;
+            CaptureLobbyHost(hostedMultiplayerLobby);
             isHost = true;
+            PlayerStateManager.Instance?.HandleLocalLobbyEntered();
             return true;
         }
         catch (Exception exception)
@@ -462,7 +518,9 @@ public class SteamManager : MonoBehaviour
             hostedMultiplayerLobby.SetData(playerEloDataString, playerElo.ToString());
 
             currentLobby = hostedMultiplayerLobby;
+            CaptureLobbyHost(hostedMultiplayerLobby);
             isHost = true;
+            PlayerStateManager.Instance?.HandleLocalLobbyEntered();
             return true;
         }
         catch (Exception exception)
@@ -475,10 +533,36 @@ public class SteamManager : MonoBehaviour
 
     public void OpenFriendOverlayForGameInvite()
     {
-        if (currentLobby.Id != null)
+        if (!ConnectedToSteam())
         {
-            SteamFriends.OpenGameInviteOverlay(currentLobby.Id);
+            Debug.LogWarning("[SteamManager] Steam overlay is unavailable because Steam is not initialized.");
+            return;
         }
+
+        if (!HasActiveLobby)
+        {
+            Debug.LogWarning("[SteamManager] Create or join a lobby before inviting friends.");
+            return;
+        }
+
+        SteamFriends.OpenGameInviteOverlay(currentLobby.Id);
+    }
+
+    /// <summary>Creates a public joinable lobby when necessary, then opens Steam's invite UI.</summary>
+    public async void CreateJoinableLobbyAndOpenInvite()
+    {
+        if (!ConnectedToSteam())
+        {
+            Debug.LogWarning("[SteamManager] Steam is unavailable, so an invite lobby cannot be created.");
+            return;
+        }
+
+        if (!HasActiveLobby && !await CreateLobby(0))
+        {
+            return;
+        }
+
+        OpenFriendOverlayForGameInvite();
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode loadSceneMode)
@@ -498,6 +582,91 @@ public class SteamManager : MonoBehaviour
     }
 
     // --- Multi-peer helpers ---
+
+    public bool HasActiveLobby => currentLobby.Id.Value != 0;
+
+    public bool IsLocalPlayerLobbyHost => IsLobbyHost(PlayerSteamId);
+
+    public bool TryGetLobbyHost(out SteamId hostId)
+    {
+        hostId = 0;
+        if (!HasActiveLobby)
+        {
+            return false;
+        }
+
+        CaptureLobbyHost(currentLobby);
+        hostId = lobbyHostId;
+        return hostId.Value != 0;
+    }
+
+    public bool IsLobbyHost(SteamId steamId)
+    {
+        return TryGetLobbyHost(out SteamId hostId) && hostId == steamId;
+    }
+
+    private void CaptureLobbyHost(Lobby lobby)
+    {
+        if (lobby.Id.Value == 0)
+        {
+            return;
+        }
+
+        if (authorityLobbyId == lobby.Id.Value && lobbyHostId.Value != 0)
+        {
+            return;
+        }
+
+        authorityLobbyId = lobby.Id.Value;
+        lobbyHostId = lobby.Owner.Id;
+    }
+
+    private bool ShouldAcceptLobbyCallback(Lobby lobby)
+    {
+        if (!isLobbyTransitionInProgress || pendingLobbyId == 0)
+        {
+            return currentLobby.Id.Value != 0 && currentLobby.Id == lobby.Id;
+        }
+
+        return lobby.Id.Value == pendingLobbyId;
+    }
+
+    private void ActivateLobby(Lobby lobby, bool forceLobbyRoute, SteamId inviter = default)
+    {
+        bool newLobby = currentLobby.Id != lobby.Id;
+        currentLobby = lobby;
+        hostedMultiplayerLobby = default;
+        isHost = lobby.Owner.Id == PlayerSteamId;
+        CaptureLobbyHost(lobby);
+
+        if (inviter.Value != 0)
+        {
+            lobbyPartner = SteamFriends.GetFriends().FirstOrDefault(friend => friend.Id == inviter);
+        }
+        else
+        {
+            lobbyPartner = lobby.Owner;
+        }
+
+        SyncRemoteMembersWithLobby(lobby);
+        if (newLobby)
+        {
+            PlayerStateManager.Instance?.HandleLocalLobbyEntered();
+        }
+
+        if (forceLobbyRoute)
+        {
+            RouteToLobbyScene();
+        }
+    }
+
+    private void ResetSessionForLobbyTransition()
+    {
+        SceneSyncManager.Instance?.ResetForLobbyTransition();
+        NetworkConnectionManager.Instance?.CleanupAllRemotePlayers();
+        VoiceSessionManager.Instance?.ResetForLobbyTransition();
+        SatelliteStateManager.Instance?.ResetForLobbyTransition();
+    }
 
     private void SyncRemoteMembersWithLobby(Lobby lobby)
     {
@@ -527,7 +696,6 @@ public class SteamManager : MonoBehaviour
         AcceptP2P(friend.Id);
 
         RemotePlayerJoined?.Invoke(friend.Id, friend.Name);
-        TryAutoSpawnRemotePlayer(friend.Id, friend.Name);
     }
 
     private void RemoveRemoteMember(SteamId steamId)
@@ -547,37 +715,140 @@ public class SteamManager : MonoBehaviour
             }
 
             RemotePlayerLeft?.Invoke(steamId);
+            PlayerStateManager.Instance?.SetPlayerConnected(steamId, false);
             TryDespawnRemotePlayer(steamId);
         }
     }
 
-    private void TryAutoSpawnRemotePlayer(SteamId steamId, string displayName)
+    private void RouteToLobbyScene()
     {
-        if (NetworkConnectionManager.Instance == null) return;
-
-        // CRITICAL: Don't spawn remote player prefabs in the Lobby or Matchmaking scenes
-        // Lobby uses lightweight voice proxies only, managed by LobbyNetworkingManager
-        // Matchmaking scene doesn't need remote player prefabs at all
-        // Check both: local player's state AND current scene name (scene name is more reliable during transitions)
-        string currentSceneName = SceneManager.GetActiveScene().name;
-        bool isLobbyOrMatchmaking = currentSceneName == "Lobby" || currentSceneName == "Matchmaking";
-
-        // Also check PlayerStateManager as a secondary check
-        var localState = PlayerStateManager.Instance?.GetPlayerState(PlayerSteamId);
-        if (localState != null && localState.Scene == NetworkSceneId.Lobby)
+        if (SceneFlowController.Instance != null && SceneFlowController.Instance.LoadLobbyScene())
         {
-            isLobbyOrMatchmaking = true;
-        }
-
-        if (isLobbyOrMatchmaking)
-        {
-            // Don't spawn - LobbyNetworkingManager will handle voice proxies in Lobby
-            Debug.Log($"[SteamManager] Skipping remote player spawn for {displayName} in {currentSceneName} scene");
             return;
         }
 
-        Debug.Log($"Attempting to spawn remote player for {steamId} ({displayName})");
-        NetworkConnectionManager.Instance.SpawnRemotePlayerFor(steamId, displayName);
+        string fallbackLobby = NetworkingConfiguration.Instance?.GetSceneName(NetworkSceneId.Lobby);
+
+        if (!string.IsNullOrWhiteSpace(fallbackLobby))
+        {
+            SceneManager.LoadScene(fallbackLobby);
+        }
+    }
+
+    private bool ShouldRouteToLobbyFromSteamEvent()
+    {
+        // If we are already in a gameplay scene, ignore late/duplicate Steam lobby callbacks.
+        if (PlayerStateManager.Instance != null && PlayerSteamId.Value != 0)
+        {
+            PlayerState localState = PlayerStateManager.Instance.GetPlayerState(PlayerSteamId);
+            if (localState.Scene == NetworkSceneId.GroundControl || localState.Scene == NetworkSceneId.SpaceStation)
+            {
+                return false;
+            }
+        }
+
+        string activeScene = SceneManager.GetActiveScene().name;
+        if (SceneFlowController.Instance != null)
+        {
+            return SceneFlowController.Instance.IsLobbyOrMatchmakingScene(activeScene);
+        }
+
+        return activeScene == "Matchmaking" || activeScene == "Lobby";
+    }
+
+    public bool TryGetDevelopmentJoinAssignment(out PlayerRole role, out NetworkSceneId scene)
+    {
+        role = PlayerRole.None;
+        scene = NetworkSceneId.None;
+
+        GameFlowDefinition definition = SceneFlowController.Instance?.Definition ??
+            NetworkingConfiguration.Instance?.gameFlowDefinition;
+        if (definition == null)
+        {
+            return false;
+        }
+
+        NetworkSceneId activeScene = NetworkSceneId.None;
+        bool hasMappedGameplayScene = SceneFlowController.Instance != null &&
+            SceneFlowController.Instance.TryGetSceneId(SceneManager.GetActiveScene().name, out activeScene) &&
+            (activeScene == NetworkSceneId.GroundControl || activeScene == NetworkSceneId.SpaceStation);
+        if (!IsDevelopmentSessionActive && !(definition.DevSession.enabled && hasMappedGameplayScene))
+        {
+            return false;
+        }
+
+        PlayerRole localRole = PlayerStateManager.Instance?.GetPlayerState(PlayerSteamId).Role ?? PlayerRole.None;
+        if (localRole == PlayerRole.None && hasMappedGameplayScene)
+        {
+            localRole = definition.ResolveDevelopmentLocalRole(activeScene);
+        }
+
+        role = definition.ResolveDevelopmentJoinRole(localRole);
+        scene = definition.ResolveDevelopmentJoinScene(role);
+        return role != PlayerRole.None && scene != NetworkSceneId.None;
+    }
+
+    private async void RunDevelopmentSession()
+    {
+#if !(UNITY_EDITOR || DEVELOPMENT_BUILD)
+        return;
+#else
+        GameFlowDefinition definition = SceneFlowController.Instance?.Definition ??
+            NetworkingConfiguration.Instance?.gameFlowDefinition;
+        if (definition == null || !definition.DevSession.enabled)
+        {
+            return;
+        }
+
+        if (SceneFlowController.Instance == null ||
+            !SceneFlowController.Instance.TryGetSceneId(SceneManager.GetActiveScene().name, out NetworkSceneId activeScene))
+        {
+            Debug.LogWarning("[SteamManager] Development session requires the active scene to be mapped in GameFlowDefinition.");
+            return;
+        }
+
+        if (PlayerSteamId.Value == 0)
+        {
+            Debug.Log("[SteamManager] Development session is running locally because Steam is unavailable.");
+            return;
+        }
+
+        PlayerRole localRole = definition.ResolveDevelopmentLocalRole(activeScene);
+        if (PlayerStateManager.Instance != null)
+        {
+            if (localRole != PlayerRole.None)
+            {
+                PlayerStateManager.Instance.SetLocalPlayerRole(localRole);
+            }
+
+            PlayerStateManager.Instance.SetLocalPlayerScene(activeScene);
+        }
+
+        if (!definition.DevSession.createJoinableLobby || HasActiveLobby)
+        {
+            IsDevelopmentSessionActive = true;
+            return;
+        }
+
+        if (!await CreateLobby(0))
+        {
+            Debug.LogWarning("[SteamManager] Development session could not create its joinable lobby.");
+            return;
+        }
+
+        IsDevelopmentSessionActive = true;
+
+        // Re-broadcast after the lobby exists so late joiners have an authoritative baseline.
+        if (PlayerStateManager.Instance != null)
+        {
+            if (localRole != PlayerRole.None)
+            {
+                PlayerStateManager.Instance.SetLocalPlayerRole(localRole);
+            }
+
+            PlayerStateManager.Instance.SetLocalPlayerScene(activeScene);
+        }
+#endif
     }
 
     private void TryDespawnRemotePlayer(SteamId steamId)

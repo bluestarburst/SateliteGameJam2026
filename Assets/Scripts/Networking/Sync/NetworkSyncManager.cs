@@ -68,7 +68,8 @@ namespace SatelliteGameJam.Networking.Sync
             if (handlersRegistered) return;
             if (NetworkConnectionManager.Instance == null)
             {
-                Debug.LogWarning("[NetworkSyncManager] NetworkConnectionManager not ready, deferring handler registration");
+                if (debugLogging)
+                    Debug.Log("[NetworkSyncManager] Deferring handler registration until NetworkConnectionManager is ready");
                 return;
             }
 
@@ -110,7 +111,7 @@ namespace SatelliteGameJam.Networking.Sync
             if (identity == null)
             {
                 if (debugLogging)
-                    Debug.LogWarning($"[NetworkSyncManager] TransformSync: No object with NetworkId {netId}");
+                    Debug.Log($"[NetworkSyncManager] Ignored TransformSync for an avatar not present in this scene ({netId})");
                 return;
             }
 
@@ -134,7 +135,7 @@ namespace SatelliteGameJam.Networking.Sync
             if (identity == null)
             {
                 if (debugLogging)
-                    Debug.LogWarning($"[NetworkSyncManager] PhysicsSync: No object with NetworkId {netId}");
+                    Debug.Log($"[NetworkSyncManager] Ignored PhysicsSync for an object not present in this scene ({netId})");
                 return;
             }
 

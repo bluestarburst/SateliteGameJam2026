@@ -8,6 +8,9 @@ using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Identity;
 using SatelliteGameJam.Networking.Debugging;
 using SatelliteGameJam.Networking.Core.Abstractions;
+using SatelliteGameJam.Networking.Sync;
+using SatelliteGameJam.Networking.State;
+using SatelliteGameJam.Networking.Voice;
 
 namespace SatelliteGameJam.Networking.Core
 {
@@ -32,27 +35,27 @@ namespace SatelliteGameJam.Networking.Core
 
     // Part 6: Extensible handler system
     private NetworkHandlerRegistry handlerRegistry = new NetworkHandlerRegistry();
-    private NetworkMessageRegistry messageRegistry = NetworkMessageRegistry.Instance;
     
     // Part 6: Transport abstraction
     private INetworkTransport transport;
 
     [Header("Configuration")]
+    [HideInInspector]
     [SerializeField] private NetworkingConfiguration config;
-
-    // Fallback settings if no config is assigned
-    [Header("Fallback Settings (used if no config assigned)")]
-    [SerializeField] private int[] channelsToPoll = new[] { 0, 1, 3, 4 }; // Exclude voice channel 2
-    [SerializeField] private bool autoSpawnPlayer = true;
-    [SerializeField] private GameObject playerPrefab;
+    [HideInInspector]
+    [SerializeField] private RoleVisualProfile roleVisualProfile;
 
     // Track spawned remote player instances to prevent duplicates and allow cleanup
     private readonly Dictionary<SteamId, GameObject> spawnedRemotePlayers = new();
 
     // Properties for accessing configuration
-    private int[] ChannelsToPoll => config != null ? config.channelsToPoll : channelsToPoll;
-    private bool AutoSpawnPlayer => config != null ? config.autoSpawnPlayers : autoSpawnPlayer;
-    private GameObject PlayerPrefab => config != null ? config.remotePlayerPrefab : playerPrefab;
+    private static readonly int[] ChannelsToPoll = { 0, 1, 3, 4 }; // Voice uses its own receiver.
+    private bool AutoSpawnPlayer => config != null
+        ? config.autoSpawnPlayers
+        : NetworkingConfiguration.Instance?.autoSpawnPlayers ?? false;
+    private GameObject PlayerPrefab => config != null
+        ? config.remotePlayerPrefab
+        : NetworkingConfiguration.Instance?.remotePlayerPrefab;
 
 
     private void Awake()
@@ -68,6 +71,11 @@ namespace SatelliteGameJam.Networking.Core
         DontDestroyOnLoad(gameObject);
         messageHandlers = new Dictionary<NetworkMessageType, Action<SteamId, byte[]>>();
 
+        if (config == null)
+        {
+            config = NetworkingConfiguration.Instance;
+        }
+
         // Part 6: Initialize transport layer
         InitializeTransport();
 
@@ -76,15 +84,10 @@ namespace SatelliteGameJam.Networking.Core
         {
             config.ValidateConfiguration();
             
-            // Part 6: Load custom message types if configured
-            if (config.useExtensibleMessageSystem)
-            {
-                config.LoadCustomMessages();
-            }
         }
         else
         {
-            Debug.LogWarning("[NetworkConnectionManager] No NetworkingConfiguration assigned. Using fallback settings.");
+            Debug.LogError("[NetworkConnectionManager] NetworkingConfig is missing; network spawning and transport settings are unavailable.");
         }
     }
 
@@ -105,12 +108,24 @@ namespace SatelliteGameJam.Networking.Core
 
     private void Update()
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
         // Poll channels from configuration
         foreach (int channel in ChannelsToPoll)
         {
             if (channel == 2) continue; // Skip voice channel
             PollChannel(channel);
         }
+    }
+
+    private bool HasNetworkRuntime()
+    {
+        return SteamManager.Instance != null
+            && SteamManager.Instance.PlayerSteamId.Value != 0
+            && SteamManager.Instance.ConnectedToSteam();
     }
 
     /// <summary>
@@ -180,10 +195,18 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void SendToAll(byte[] data, int channel, P2PSend sendType)
     {
-        // Send to all peers via SteamManager.Instance.currentLobby.Members
-        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.MemberCount == 0)
+        if (!HasNetworkRuntime())
         {
-            Debug.LogWarning("Cannot send data - not connected to a lobby.");
+            return;
+        }
+
+        // Send to all peers via SteamManager.Instance.currentLobby.Members
+        if (SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
+        {
+            if (config != null && config.verboseLogging)
+            {
+                Debug.Log($"[NetworkConnectionManager] Skipped send before lobby join. channel={channel} bytes={(data != null ? data.Length : 0)}");
+            }
             return;
         }
         foreach (var member in SteamManager.Instance.currentLobby.Members)
@@ -200,10 +223,15 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void SendTo(SteamId targetId, byte[] data, int channel, P2PSend sendType)
     {
-        // Send to specific peer
-        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.MemberCount == 0)
+        if (!HasNetworkRuntime())
         {
-            Debug.LogWarning("Cannot send data - not connected to a lobby.");
+            return;
+        }
+
+        // Send to specific peer
+        if (SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
+        {
+            Debug.LogWarning($"Cannot send data - not connected to a lobby. target={targetId} channel={channel} bytes={(data != null ? data.Length : 0)}");
             return;
         }
         if (!SteamManager.Instance.currentLobby.Members.ToList().Any(m => m.Id == targetId))
@@ -283,6 +311,37 @@ namespace SatelliteGameJam.Networking.Core
             identity.SetNetworkId((uint)steamId.Value); // Use SteamId as network ID for simplicity
         }
 
+        // Keep remote player visuals configurable via profile (core + swappable visuals).
+        var composition = instance.GetComponent<PlayerAvatarComposition>();
+        if (composition == null)
+        {
+            composition = instance.AddComponent<PlayerAvatarComposition>();
+        }
+
+        var state = PlayerStateManager.Instance?.GetPlayerState(steamId);
+        NetworkSceneId playerScene = state?.Scene ?? NetworkSceneId.None;
+        PlayerRole playerRole = state?.Role ?? PlayerRole.None;
+
+        var remoteAvatar = instance.GetComponent<RemotePlayerAvatar>();
+        if (remoteAvatar != null)
+        {
+            remoteAvatar.Configure(steamId, displayName, roleVisualProfile);
+        }
+        else
+        {
+            // Compatibility for existing third-party or prototype remote prefabs.
+            var playerTag = instance.GetComponent<NetworkPlayerTag>() ?? instance.AddComponent<NetworkPlayerTag>();
+            playerTag.Configure(steamId, displayName, NetworkPlayerKind.Remote, playerRole, playerScene);
+
+            GameObject visualPrefab = roleVisualProfile != null ? roleVisualProfile.Resolve(playerRole, playerScene) : null;
+            if (visualPrefab != null)
+            {
+                composition.ApplyVisual(visualPrefab);
+            }
+        }
+
+        VoiceSessionManager.Instance?.RegisterRemotePlayerAvatar(steamId, instance);
+
         spawnedRemotePlayers[steamId] = instance;
         
         if (config != null && config.verboseLogging)
@@ -299,6 +358,7 @@ namespace SatelliteGameJam.Networking.Core
         if (spawnedRemotePlayers.TryGetValue(steamId, out var instance))
         {
             Debug.Log($"Despawning remote player for {steamId}");
+            VoiceSessionManager.Instance?.UnregisterRemotePlayer(steamId);
             if (instance != null)
             {
                 Destroy(instance);
@@ -314,10 +374,14 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void CleanupAllRemotePlayers()
     {
-        Debug.Log($"[NetworkConnectionManager] Cleaning up {spawnedRemotePlayers.Count} remote player models");
+        if (spawnedRemotePlayers.Count > 0 && config != null && config.verboseLogging)
+        {
+            Debug.Log($"[NetworkConnectionManager] Cleaning up {spawnedRemotePlayers.Count} remote player models");
+        }
         
         foreach (var kvp in spawnedRemotePlayers)
         {
+            VoiceSessionManager.Instance?.UnregisterRemotePlayer(kvp.Key);
             if (kvp.Value != null)
             {
                 Destroy(kvp.Value);
@@ -367,6 +431,22 @@ namespace SatelliteGameJam.Networking.Core
     /// </example>
     public void SendMessage<T>(SteamId target, T message) where T : INetworkMessage
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
+        if (SteamManager.Instance.currentLobby.Id.Value == 0 ||
+            !SteamManager.Instance.currentLobby.Members.Any(member => member.Id == target))
+        {
+            if (config != null && config.verboseLogging)
+            {
+                Debug.LogWarning($"[NetworkConnectionManager] Cannot send extensible message to {target}; target is not in the active lobby.");
+            }
+
+            return;
+        }
+
         byte[] data = message.Serialize();
         P2PSend sendType = message.RequireReliable ? P2PSend.Reliable : P2PSend.UnreliableNoDelay;
         
@@ -398,7 +478,12 @@ namespace SatelliteGameJam.Networking.Core
     /// </example>
     public void SendMessageToAll<T>(T message) where T : INetworkMessage
     {
-        if (SteamManager.Instance?.currentLobby.MemberCount == 0)
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
+        if (SteamManager.Instance.currentLobby.MemberCount == 0)
         {
             Debug.LogWarning("[NetworkConnectionManager] Cannot broadcast message - not in lobby");
             return;

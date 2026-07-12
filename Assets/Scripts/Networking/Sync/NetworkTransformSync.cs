@@ -39,6 +39,11 @@ namespace SatelliteGameJam.Networking.Sync
     
     private void Update()
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
         if (IsOwner())
         {
             if (Time.time >= nextSendTime)
@@ -59,7 +64,14 @@ namespace SatelliteGameJam.Networking.Sync
     private bool IsOwner()
     {
         // Ownership check
-        return netIdentity.OwnerSteamId == SteamManager.Instance?.PlayerSteamId;
+        return SteamManager.Instance != null && netIdentity.OwnerSteamId == SteamManager.Instance.PlayerSteamId;
+    }
+
+    private bool HasNetworkRuntime()
+    {
+        return SteamManager.Instance != null
+            && SteamManager.Instance.PlayerSteamId.Value != 0
+            && NetworkConnectionManager.Instance != null;
     }
     
     /// <summary>
@@ -67,6 +79,11 @@ namespace SatelliteGameJam.Networking.Sync
     /// </summary>
     private void SendTransformState()
     {
+       if (NetworkConnectionManager.Instance == null)
+       {
+           return;
+       }
+
        // Packet: [Type(1)][NetId(4)][OwnerSteamId(8)][Pos(12)][Rot(16)][Vel(12)]
         const int packetSize = 53;
         byte[] packet = new byte[packetSize];
@@ -101,6 +118,16 @@ namespace SatelliteGameJam.Networking.Sync
         int offset = 5;
 
         SteamId ownerSteamId = NetworkSerialization.ReadULong(data, ref offset);
+        if (sender != ownerSteamId)
+        {
+            return;
+        }
+
+        if (netIdentity.OwnerSteamId.Value != 0 && netIdentity.OwnerSteamId != ownerSteamId)
+        {
+            return;
+        }
+
         netIdentity.SetOwner(ownerSteamId);
 
         if (!IsOwner())

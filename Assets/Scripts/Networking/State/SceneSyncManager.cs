@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Steamworks;
@@ -19,24 +20,22 @@ namespace SatelliteGameJam.Networking.State
         public static SceneSyncManager Instance { get; private set; }
 
         [Header("Configuration")]
+        [HideInInspector]
         [SerializeField] private NetworkingConfiguration config;
+        [HideInInspector]
+        [SerializeField] private SceneFlowController sceneFlowController;
 
-        [Header("Fallback Scene Names (if no config assigned)")]
-        [SerializeField] private string lobbySceneName = "Lobby";
-        [SerializeField] private string groundControlSceneName = "GroundControl";
-        [SerializeField] private string spaceStationSceneName = "SpaceStation";
+        private const float DefaultSceneChangeTimeoutSeconds = 10f;
 
         [Header("Behavior")]
-        [SerializeField] private float sceneChangeTimeoutSeconds = 10f;
         [SerializeField] private bool logDebug = true;
 
         private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
+        private bool handlersRegistered;
 
-        // Properties for accessing configuration
-        private string LobbySceneName => config != null ? config.lobbySceneName : lobbySceneName;
-        private string GroundControlSceneName => config != null ? config.groundControlSceneName : groundControlSceneName;
-        private string SpaceStationSceneName => config != null ? config.spaceStationSceneName : spaceStationSceneName;
-        private float SceneChangeTimeout => config != null ? config.sceneChangeTimeoutSeconds : sceneChangeTimeoutSeconds;
+        private float SceneChangeTimeout => config != null
+            ? config.sceneChangeTimeoutSeconds
+            : NetworkingConfiguration.Instance?.sceneChangeTimeoutSeconds ?? DefaultSceneChangeTimeoutSeconds;
 
         private void Awake()
         {
@@ -47,6 +46,10 @@ namespace SatelliteGameJam.Networking.State
             }
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            if (sceneFlowController == null)
+            {
+                sceneFlowController = SceneFlowController.Instance;
+            }
 
             RegisterHandlers();
             SceneManager.sceneLoaded += OnSceneLoaded;
@@ -54,9 +57,14 @@ namespace SatelliteGameJam.Networking.State
 
         private void RegisterHandlers()
         {
+            if (handlersRegistered)
+            {
+                return;
+            }
+
             if (NetworkConnectionManager.Instance == null)
             {
-                Debug.LogWarning("[SceneSync] NetworkConnectionManager not found. Retrying...");
+                if (logDebug) Debug.Log("[SceneSync] Waiting for NetworkConnectionManager before registering handlers");
                 Invoke(nameof(RegisterHandlers), 0.5f);
                 return;
             }
@@ -69,10 +77,16 @@ namespace SatelliteGameJam.Networking.State
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
                 PlayerStateManager.Instance.OnPlayerSceneChanged += OnRemotePlayerSceneChanged;
             }
+
+            handlersRegistered = true;
         }
 
         private void OnDestroy()
         {
+            CancelInvoke(nameof(RegisterHandlers));
+            CancelInvoke(nameof(CheckAckTimeout));
+            CancelInvoke(nameof(SpawnPlayersForCurrentScene));
+
             if (NetworkConnectionManager.Instance != null)
             {
                 NetworkConnectionManager.Instance.UnregisterHandler(NetworkMessageType.SceneChangeRequest, OnReceiveSceneChangeRequest);
@@ -96,6 +110,13 @@ namespace SatelliteGameJam.Networking.State
                 if (logDebug) Debug.Log("[SceneSync] Not lobby owner; cannot start game.");
                 return;
             }
+
+            if (sceneFlowController != null && !sceneFlowController.CanHostStartGame(out string reason))
+            {
+                Debug.LogWarning($"[SceneSync] Cannot start game: {reason}");
+                return;
+            }
+
             BroadcastRoleBasedScenes();
             BeginAckWindow();
         }
@@ -114,12 +135,17 @@ namespace SatelliteGameJam.Networking.State
             BeginAckWindow();
         }
 
+        /// <summary>Stops transition work that belongs to the lobby being left.</summary>
+        public void ResetForLobbyTransition()
+        {
+            pendingAcks.Clear();
+            CancelInvoke(nameof(CheckAckTimeout));
+            CancelInvoke(nameof(SpawnPlayersForCurrentScene));
+        }
+
         private bool IsOwner()
         {
-            if (SteamManager.Instance == null) return false;
-            var lobby = SteamManager.Instance.currentLobby;
-            if (lobby.Id.Value == 0) return false;
-            return lobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId);
+            return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
         }
 
         private void BroadcastRoleBasedScenes()
@@ -130,9 +156,7 @@ namespace SatelliteGameJam.Networking.State
             foreach (var member in members)
             {
                 var state = PlayerStateManager.Instance.GetPlayerState(member.Id);
-                NetworkSceneId target = state.Role == PlayerRole.SpaceStation
-                    ? NetworkSceneId.SpaceStation
-                    : NetworkSceneId.GroundControl;
+                NetworkSceneId target = ResolveGameplaySceneForRole(state.Role);
 
                 if (member.Id == SteamManager.Instance.PlayerSteamId)
                 {
@@ -143,6 +167,60 @@ namespace SatelliteGameJam.Networking.State
                 {
                     SendPlayerSceneAssignment(member.Id, target);
                 }
+            }
+        }
+
+        public void AssignJoiningPlayer(SteamId joiningPlayer)
+        {
+            if (!IsOwner() || joiningPlayer.Value == 0 || PlayerStateManager.Instance == null)
+            {
+                return;
+            }
+
+            StartCoroutine(AssignJoiningPlayerAfterLobbySettles(joiningPlayer));
+        }
+
+        private IEnumerator AssignJoiningPlayerAfterLobbySettles(SteamId joiningPlayer)
+        {
+            yield return new WaitForSeconds(0.25f);
+
+            if (!IsOwner() || PlayerStateManager.Instance == null)
+            {
+                yield break;
+            }
+
+            PlayerState state = PlayerStateManager.Instance.GetPlayerState(joiningPlayer);
+            bool gameInProgress = IsGameInProgress();
+            PlayerRole role = state.Role;
+
+            if (SteamManager.Instance.TryGetDevelopmentJoinAssignment(out PlayerRole developmentRole, out NetworkSceneId developmentScene))
+            {
+                PlayerStateManager.Instance.SetPlayerRoleFromAuthority(joiningPlayer, developmentRole);
+                PlayerStateManager.Instance.SetPlayerSceneFromAuthority(joiningPlayer, developmentScene, developmentRole);
+
+                if (logDebug)
+                {
+                    Debug.Log($"[SceneSync] Assigned development joiner {joiningPlayer} to role {developmentRole}, scene {developmentScene}");
+                }
+
+                yield break;
+            }
+
+            if (role == PlayerRole.None || role == PlayerRole.Lobby)
+            {
+                role = gameInProgress ? ChooseRoleForMidRoundJoin() : PlayerRole.Lobby;
+                PlayerStateManager.Instance.SetPlayerRoleFromAuthority(joiningPlayer, role);
+            }
+
+            NetworkSceneId targetScene = gameInProgress
+                ? ResolveGameplaySceneForRole(role)
+                : NetworkSceneId.Lobby;
+
+            PlayerStateManager.Instance.SetPlayerSceneFromAuthority(joiningPlayer, targetScene, role);
+
+            if (logDebug)
+            {
+                Debug.Log($"[SceneSync] Assigned joining player {joiningPlayer} to role {role}, scene {targetScene}");
             }
         }
 
@@ -167,16 +245,16 @@ namespace SatelliteGameJam.Networking.State
         {
             pendingAcks.Clear();
             if (SteamManager.Instance == null) return;
-            
+
             // Cancel any pending timeout checks
             CancelInvoke(nameof(CheckAckTimeout));
-            
+
             foreach (var m in SteamManager.Instance.currentLobby.Members)
             {
                 if (m.Id != SteamManager.Instance.PlayerSteamId)
                     pendingAcks.Add(m.Id);
             }
-            
+
             if (pendingAcks.Count > 0)
             {
                 Invoke(nameof(CheckAckTimeout), SceneChangeTimeout);
@@ -208,7 +286,14 @@ namespace SatelliteGameJam.Networking.State
             }
 
             if (logDebug) Debug.Log($"[SceneSync] Loading scene '{sceneName}' for local player");
-            SceneManager.LoadScene(sceneName);
+            if (sceneFlowController != null)
+            {
+                sceneFlowController.LoadSceneForLocal(sceneId);
+            }
+            else
+            {
+                SceneManager.LoadScene(sceneName);
+            }
         }
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -216,7 +301,31 @@ namespace SatelliteGameJam.Networking.State
             // CRITICAL FIX: Only clean up remote player prefabs when NOT in Lobby/Matchmaking
             // Lobby uses voice proxies managed by LobbyNetworkingManager
             // Cleaning up on entry to Lobby would destroy those voice proxies immediately after creation
-            bool isLobbyOrMatchmaking = scene.name == LobbySceneName || scene.name == "Matchmaking";
+            bool isLobbyOrMatchmaking = sceneFlowController != null
+                ? sceneFlowController.IsLobbyOrMatchmakingScene(scene.name)
+                : scene.name == ResolveSceneName(NetworkSceneId.Lobby) || scene.name == ResolveSceneName(NetworkSceneId.Matchmaking);
+            bool isLobbyScene = scene.name == ResolveSceneName(NetworkSceneId.Lobby);
+
+            // Ensure lobby voice/chat routing has a deterministic baseline state, even when
+            // scene-local lobby manager wiring is missing or delayed.
+            if (isLobbyScene && PlayerStateManager.Instance != null && SteamManager.Instance != null)
+            {
+                SteamId localId = SteamManager.Instance.PlayerSteamId;
+                if (localId.Value != 0)
+                {
+                    PlayerState localState = PlayerStateManager.Instance.GetPlayerState(localId);
+
+                    if (localState.Scene != NetworkSceneId.Lobby)
+                    {
+                        PlayerStateManager.Instance.SetLocalPlayerScene(NetworkSceneId.Lobby);
+                    }
+
+                    if (localState.Role == PlayerRole.None)
+                    {
+                        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.Lobby);
+                    }
+                }
+            }
 
             if (NetworkConnectionManager.Instance != null && !isLobbyOrMatchmaking)
             {
@@ -321,32 +430,44 @@ namespace SatelliteGameJam.Networking.State
                     Debug.Log($"[SceneSync] Late spawn: {displayName} joined scene {sceneId}");
                 }
             }
+            else
+            {
+                // A remote avatar is scene-local presentation, not a persistent player object.
+                // Their authoritative state and voice binding can persist independently.
+                NetworkConnectionManager.Instance?.DespawnRemotePlayer(steamId);
+            }
         }
 
         private string ResolveSceneName(NetworkSceneId sceneId)
         {
-            switch (sceneId)
+            if (sceneFlowController != null)
             {
-                case NetworkSceneId.Lobby: return LobbySceneName;
-                case NetworkSceneId.GroundControl: return GroundControlSceneName;
-                case NetworkSceneId.SpaceStation: return SpaceStationSceneName;
-                default: return string.Empty;
+                string mapped = sceneFlowController.ResolveSceneName(sceneId);
+                if (!string.IsNullOrWhiteSpace(mapped))
+                {
+                    return mapped;
+                }
             }
+
+            return NetworkingConfiguration.Instance?.GetSceneName(sceneId) ?? string.Empty;
+        }
+
+        private NetworkSceneId ResolveGameplaySceneForRole(PlayerRole role)
+        {
+            if (sceneFlowController != null)
+            {
+                return sceneFlowController.ResolveGameplaySceneForRole(role);
+            }
+
+            return role == PlayerRole.SpaceStation
+                ? NetworkSceneId.SpaceStation
+                : NetworkSceneId.GroundControl;
         }
 
         private void SendPlayerSceneAssignment(SteamId targetPlayer, NetworkSceneId targetScene)
         {
-              byte[] packet = new byte[16]; // Type(1) + SteamId(8) + SceneId(2) + Role(1) + Timestamp(4)
-            packet[0] = (byte)NetworkMessageType.PlayerSceneState;
-            int offset = 1;
-            NetworkSerialization.WriteULong(packet, ref offset, targetPlayer);
-            packet[offset++] = (byte)(((ushort)targetScene) >> 8);
-            packet[offset++] = (byte)(((ushort)targetScene) & 0xFF);
             var role = PlayerStateManager.Instance?.GetPlayerState(targetPlayer).Role ?? PlayerRole.None;
-            packet[offset++] = (byte)role;
-            NetworkSerialization.WriteFloat(packet, ref offset, Time.time);
-
-            NetworkConnectionManager.Instance.SendToAll(packet, 4, P2PSend.Reliable);
+            PlayerStateManager.Instance?.SetPlayerSceneFromAuthority(targetPlayer, targetScene, role);
         }
 
         private void SendSceneAck()
@@ -354,6 +475,14 @@ namespace SatelliteGameJam.Networking.State
             if (SteamManager.Instance == null || NetworkConnectionManager.Instance == null)
             {
                 if (logDebug) Debug.LogWarning("[SceneSync] Cannot send ack - manager not ready");
+                return;
+            }
+
+            if (SteamManager.Instance.currentLobby.Id.Value == 0)
+            {
+                if (logDebug) Debug.Log("[SceneSync] Deferring ack - no active lobby yet");
+                CancelInvoke(nameof(SendSceneAck));
+                Invoke(nameof(SendSceneAck), 0.5f);
                 return;
             }
 
@@ -366,7 +495,7 @@ namespace SatelliteGameJam.Networking.State
             packet[offset++] = (byte)(((ushort)sceneId) >> 8);
             packet[offset++] = (byte)(((ushort)sceneId) & 0xFF);
             NetworkConnectionManager.Instance.SendToAll(packet, 0, P2PSend.Reliable);
-            
+
             if (logDebug) Debug.Log($"[SceneSync] Sent ack for scene {sceneId}");
         }
 
@@ -377,7 +506,27 @@ namespace SatelliteGameJam.Networking.State
 
         private void OnReceiveSceneChangeRequest(SteamId sender, byte[] data)
         {
-            if (logDebug) Debug.Log($"[SceneSync] Received SceneChangeRequest from {sender}");
+            if (data == null || data.Length < 15 || PlayerStateManager.Instance == null || SteamManager.Instance == null)
+            {
+                return;
+            }
+
+            int offset = 1;
+            SteamId targetPlayer = NetworkSerialization.ReadULong(data, ref offset);
+            ushort sceneValue = (ushort)((data[offset++] << 8) | data[offset++]);
+            NetworkSceneId targetScene = (NetworkSceneId)sceneValue;
+
+            if (targetPlayer != SteamManager.Instance.PlayerSteamId)
+            {
+                return;
+            }
+
+            if (logDebug)
+            {
+                Debug.Log($"[SceneSync] Received direct scene change request from {sender} for {targetScene}");
+            }
+
+            PlayerStateManager.Instance.SetLocalPlayerScene(targetScene);
         }
 
         private void OnReceiveSceneChangeAcknowledge(SteamId sender, byte[] data)
@@ -394,7 +543,7 @@ namespace SatelliteGameJam.Networking.State
                 {
                     Debug.Log($"[SceneSync] Ack from {who} for scene {sceneId}. Remaining: {pendingAcks.Count}");
                 }
-                
+
                 // All acks received - cancel timeout
                 if (pendingAcks.Count == 0)
                 {
@@ -402,6 +551,43 @@ namespace SatelliteGameJam.Networking.State
                     if (logDebug) Debug.Log("[SceneSync] All players acknowledged scene change");
                 }
             }
+        }
+
+        private bool IsGameInProgress()
+        {
+            if (SteamManager.Instance == null || PlayerStateManager.Instance == null)
+            {
+                return false;
+            }
+
+            foreach (var member in SteamManager.Instance.currentLobby.Members)
+            {
+                NetworkSceneId scene = PlayerStateManager.Instance.GetPlayerState(member.Id).Scene;
+                if (scene == NetworkSceneId.GroundControl || scene == NetworkSceneId.SpaceStation)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private PlayerRole ChooseRoleForMidRoundJoin()
+        {
+            int groundCount = 0;
+            int spaceCount = 0;
+
+            if (SteamManager.Instance != null && PlayerStateManager.Instance != null)
+            {
+                foreach (var member in SteamManager.Instance.currentLobby.Members)
+                {
+                    PlayerRole role = PlayerStateManager.Instance.GetPlayerState(member.Id).Role;
+                    if (role == PlayerRole.GroundControl) groundCount++;
+                    if (role == PlayerRole.SpaceStation) spaceCount++;
+                }
+            }
+
+            return groundCount <= spaceCount ? PlayerRole.GroundControl : PlayerRole.SpaceStation;
         }
     }
 }

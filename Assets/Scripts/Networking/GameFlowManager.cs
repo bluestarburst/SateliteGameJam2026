@@ -6,6 +6,7 @@ using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Voice;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.Identity;
+using UnityEngine.SceneManagement;
 
 namespace SatelliteGameJam.Networking
 {
@@ -30,6 +31,8 @@ namespace SatelliteGameJam.Networking
         [Header("Debug")]
         [SerializeField] private bool logDebug = false;
 
+        private bool playerStateEventsSubscribed;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -48,9 +51,25 @@ namespace SatelliteGameJam.Networking
             // Subscribe to player state events and forward them
             if (PlayerStateManager.Instance != null)
             {
-                PlayerStateManager.Instance.OnPlayerJoined += (steamId) => OnRemotePlayerJoined?.Invoke(steamId);
-                PlayerStateManager.Instance.OnPlayerLeft += (steamId) => OnRemotePlayerLeft?.Invoke(steamId);
+                PlayerStateManager.Instance.OnPlayerJoined += HandleRemotePlayerJoined;
+                PlayerStateManager.Instance.OnPlayerLeft += HandleRemotePlayerLeft;
+                PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+                playerStateEventsSubscribed = true;
             }
+
+            SceneManager.sceneLoaded += HandleSceneLoaded;
+        }
+
+        private void OnDestroy()
+        {
+            if (PlayerStateManager.Instance != null && playerStateEventsSubscribed)
+            {
+                PlayerStateManager.Instance.OnPlayerJoined -= HandleRemotePlayerJoined;
+                PlayerStateManager.Instance.OnPlayerLeft -= HandleRemotePlayerLeft;
+                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
+            }
+
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
         }
 
         // ===== LOBBY PHASE =====
@@ -135,8 +154,7 @@ namespace SatelliteGameJam.Networking
         /// </summary>
         public bool IsLocalPlayerHost()
         {
-            if (SteamManager.Instance == null) return false;
-            return SteamManager.Instance.currentLobby.Owner.Id == SteamManager.Instance.PlayerSteamId;
+            return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;
         }
 
         // ===== GAME START/END =====
@@ -234,7 +252,7 @@ namespace SatelliteGameJam.Networking
         {
             if (SatelliteStateManager.Instance != null)
             {
-                SatelliteStateManager.Instance.SetComponentDamaged(componentIndex);
+                SatelliteStateManager.Instance.RequestComponentDamaged(componentIndex);
                 
                 if (logDebug) Debug.Log($"[GameFlowManager] Satellite component {componentIndex} damaged");
             }
@@ -252,13 +270,41 @@ namespace SatelliteGameJam.Networking
         {
             if (SatelliteStateManager.Instance != null)
             {
-                SatelliteStateManager.Instance.SetComponentRepaired(componentIndex);
+                SatelliteStateManager.Instance.RequestComponentRepaired(componentIndex);
                 
                 if (logDebug) Debug.Log($"[GameFlowManager] Satellite component {componentIndex} repaired");
             }
             else
             {
                 Debug.LogWarning("[GameFlowManager] Cannot report repair - SatelliteStateManager not available");
+            }
+        }
+
+        public void ReportSatelliteModuleDamage(SatelliteModuleId moduleId)
+        {
+            if (SatelliteStateManager.Instance != null)
+            {
+                SatelliteStateManager.Instance.RequestModuleDamaged(moduleId);
+
+                if (logDebug) Debug.Log($"[GameFlowManager] Satellite module {moduleId} damaged");
+            }
+            else
+            {
+                Debug.LogWarning("[GameFlowManager] Cannot report module damage - SatelliteStateManager not available");
+            }
+        }
+
+        public void ReportSatelliteModuleRepair(SatelliteModuleId moduleId)
+        {
+            if (SatelliteStateManager.Instance != null)
+            {
+                SatelliteStateManager.Instance.RequestModuleRepaired(moduleId);
+
+                if (logDebug) Debug.Log($"[GameFlowManager] Satellite module {moduleId} repaired");
+            }
+            else
+            {
+                Debug.LogWarning("[GameFlowManager] Cannot report module repair - SatelliteStateManager not available");
             }
         }
 
@@ -316,12 +362,36 @@ namespace SatelliteGameJam.Networking
             }
         }
 
+        public event Action<SatelliteModuleState> OnSatelliteModuleStateChanged
+        {
+            add
+            {
+                if (SatelliteStateManager.Instance != null)
+                    SatelliteStateManager.Instance.OnModuleStateChanged += value;
+            }
+            remove
+            {
+                if (SatelliteStateManager.Instance != null)
+                    SatelliteStateManager.Instance.OnModuleStateChanged -= value;
+            }
+        }
+
         /// <summary>
         /// Get current satellite health (0-100).
         /// </summary>
         public float GetSatelliteHealth()
         {
             return SatelliteStateManager.Instance?.GetHealth() ?? 100f;
+        }
+
+        public float GetSatelliteOverallCondition()
+        {
+            return SatelliteStateManager.Instance?.GetOverallConditionPercent() ?? 100f;
+        }
+
+        public bool IsSatelliteModuleDamaged(SatelliteModuleId moduleId)
+        {
+            return SatelliteStateManager.Instance != null && SatelliteStateManager.Instance.IsModuleDamaged(moduleId);
         }
 
         /// <summary>
@@ -450,6 +520,40 @@ namespace SatelliteGameJam.Networking
                 players.Add(member.Id);
             }
             return players.ToArray();
+        }
+
+        private void OnPlayerSceneChanged(SteamId steamId, NetworkSceneId sceneId)
+        {
+            if (SteamManager.Instance == null || steamId != SteamManager.Instance.PlayerSteamId)
+            {
+                return;
+            }
+
+            OnSceneLoading?.Invoke(sceneId);
+        }
+
+        private void HandleRemotePlayerJoined(SteamId steamId)
+        {
+            OnRemotePlayerJoined?.Invoke(steamId);
+        }
+
+        private void HandleRemotePlayerLeft(SteamId steamId)
+        {
+            OnRemotePlayerLeft?.Invoke(steamId);
+        }
+
+        private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            SceneFlowController flow = SceneFlowController.Instance;
+            if (flow == null)
+            {
+                return;
+            }
+
+            if (flow.Definition != null && flow.Definition.TryGetSceneEntryByName(scene.name, out FlowSceneEntry entry))
+            {
+                OnSceneLoaded?.Invoke(entry.sceneId);
+            }
         }
     }
 }

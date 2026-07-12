@@ -13,33 +13,15 @@ MonoBehaviour:
   m_Name: NetworkingConfig
   m_EditorClassIdentifier: 
   steamAppId: 480
-  channelsToPoll: 00000000010000000300000004000000
-  sendTimeoutSeconds: 5
-  maxRetryAttempts: 3
   autoSpawnPlayers: 1
-  remotePlayerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
-  cleanupPlayersOnSceneChange: 1
-  lobbySceneName: Lobby
-  groundControlSceneName: BaseStation
-  spaceStationSceneName: Satellite
+  remotePlayerPrefab: {fileID: 1090182736459182736, guid: b36739ea0ce447af9a4f3f5cf1d0dc85, type: 3}
+  playerRigCatalog: {fileID: 11400000, guid: 7ea1c9f6b3cc4d48aa48dfab10a0b1ce, type: 2}
+  gameFlowDefinition: {fileID: 11400000, guid: c1d5436cbfac14cfb80f75fffe7826dd, type: 2}
   sceneChangeTimeoutSeconds: 10
   voiceChatEnabled: 1
-  voiceActivationThreshold: 0.3
   proximityVoiceDistance: 20
   useRoleBasedVoiceGating: 1
-  transformSyncRate: 30
-  physicsSyncRate: 20
-  useInterpolation: 1
-  interpolationDelayMs: 100
-  filterSatelliteMessagesByScene: 1
-  satelliteHealthUpdateRate: 5
   verboseLogging: 0
   showNetworkDebugOverlay: 1
   showPacketStatistics: 1
-  autoReconnect: 1
-  maxReconnectAttempts: 3
-  reconnectDelaySeconds: 2
   useExtensibleMessageSystem: 0
-  autoRegisterBuiltinMessages: 1
-  customMessageAssemblies: []
-  transportLayerType: SteamP2PTransport

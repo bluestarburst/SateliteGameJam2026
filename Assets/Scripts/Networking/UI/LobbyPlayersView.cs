@@ -1,11 +1,12 @@
-using Steamworks.Data;
 using Steamworks;
+using Steamworks.Data;
 using UnityEngine;
 using TMPro;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
 using System.Collections.Generic;
-using System.Linq;
+using SatelliteGameJam.Networking;
+using SatelliteGameJam.Networking.Core;
 
 // Displays members of the current lobby in a ScrollView
 public class LobbyPlayersView : MonoBehaviour
@@ -66,9 +67,17 @@ public class LobbyPlayersView : MonoBehaviour
         SteamMatchmaking.OnLobbyMemberDisconnected -= OnLobbyMemberChanged;
     }
 
+    private void OnDestroy()
+    {
+        if (PlayerStateManager.Instance != null)
+        {
+            PlayerStateManager.Instance.OnRoleChanged -= OnPlayerRoleChanged;
+        }
+    }
+
     private void CanStartGame()
     {
-        if (SteamManager.Instance == null || !SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
+        if (SteamManager.Instance == null || !SteamManager.Instance.IsLocalPlayerLobbyHost)
         {
             startButton.SetActive(false);
             return;
@@ -80,16 +89,14 @@ public class LobbyPlayersView : MonoBehaviour
             return;
         }
 
-        // need at least 2 players on different teams to start
-        var members = SteamManager.Instance.currentLobby.Members;
-        if (members.Any(m => PlayerStateManager.Instance.GetPlayerState(m.Id)?.Role == PlayerRole.SpaceStation) &&
-            members.Any(m => PlayerStateManager.Instance.GetPlayerState(m.Id)?.Role == PlayerRole.GroundControl))
+        if (SceneFlowController.Instance != null &&
+            !SceneFlowController.Instance.CanHostStartGame(out string reason))
         {
-            startButton.SetActive(true);
-        }
-        else
-        {
-            Debug.Log("Cannot start game - all players must be on different teams.");
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                Debug.Log(reason);
+            }
+
             startButton.SetActive(false);
             return;
         }
@@ -197,6 +204,12 @@ public class LobbyPlayersView : MonoBehaviour
     {
         if (playerItems.TryGetValue(steamId, out var item))
         {
+            if (item == null)
+            {
+                playerItems.Remove(steamId);
+                return;
+            }
+
             var text = item.GetComponent<TMP_Text>();
             if (text != null)
             {
@@ -215,7 +228,14 @@ public class LobbyPlayersView : MonoBehaviour
 
         Debug.Log("Joining space team");
 
-        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.SpaceStation);
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.SelectRole(PlayerRole.SpaceStation);
+        }
+        else
+        {
+            PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.SpaceStation);
+        }
 
         SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.5f, 0.8f, 1f)); // Light blue for space team
 
@@ -232,7 +252,14 @@ public class LobbyPlayersView : MonoBehaviour
 
         Debug.Log("Joining ground team");
 
-        PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.SelectRole(PlayerRole.GroundControl);
+        }
+        else
+        {
+            PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
+        }
 
         SetPlayerItemColor(SteamManager.Instance.PlayerSteamId, new UnityEngine.Color(0.8f, 0.5f, 0.5f)); // Light red for ground team  
 
@@ -242,13 +269,19 @@ public class LobbyPlayersView : MonoBehaviour
     public void StartGame()
     {
         // Initiate collective scene change if local player owns the lobby
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.StartGame();
+            return;
+        }
+
         if (SteamManager.Instance == null || SceneSyncManager.Instance == null)
         {
             Debug.LogWarning("Cannot start game - missing SteamManager or SceneSyncManager.");
             return;
         }
 
-        if (!SteamManager.Instance.currentLobby.IsOwnedBy(SteamManager.Instance.PlayerSteamId))
+        if (!SteamManager.Instance.IsLocalPlayerLobbyHost)
         {
             Debug.LogWarning("Cannot start game - you are not the lobby owner.");
             return;

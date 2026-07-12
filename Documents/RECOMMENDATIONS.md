@@ -296,11 +296,10 @@ Current implementation lacks:
 - Disconnect detection
 - Reconnection logic
 
-### 4. Consider State Authority Model
+### 4. State Authority Model ✅ COMPLETED
 
-Current: Lowest SteamId is authority for satellite state.
-
-Consider: Host authority or explicit authority assignment for clearer ownership.
+Satellite state authority follows the current Steam lobby host. This keeps authority stable during
+a round and aligns late-join assignment with the same host-owned session state.
 
 ---
 

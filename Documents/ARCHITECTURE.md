@@ -118,7 +118,7 @@ Manages satellite game state. Responsibilities:
 - Component damage bits (32 components max)
 - Console states
 - Part transforms (rotating solar panels, etc.)
-- Authority: lowest SteamId in lobby
+- Authority: current Steam lobby host
 
 ### VoiceSessionManager
 **Location:** `Assets/Scripts/Networking/Voice/VoiceSessionManager.cs`
@@ -171,20 +171,20 @@ For interactable objects. Features:
 ## Scene Managers
 
 ### LobbyNetworkingManager
-- Sets player to `Lobby` role/scene
-- Spawns all remote player models
 - Voice: everyone hears everyone
+- Creates lightweight voice proxies for lobby members
 
 ### GroundControlSceneManager
-- Sets player to `GroundControl` role/scene
-- Spawns only Ground Control players (not Space)
 - Voice gating: only hear Space when at console
 - Subscribes to satellite state for UI updates
 
 ### SpaceStationSceneManager
-- Sets player to `SpaceStation` role/scene
-- Spawns only Space Station players (not Ground)
 - Can repair/damage satellite components
+
+### SceneFlowController
+- Resolves scene names and default roles from `GameFlowDefinition`
+- Synchronizes local scene/role presence after scene loads
+- Supports direct-scene development sessions without bypassing the normal state model
 
 ## Voice Gating Rules
 

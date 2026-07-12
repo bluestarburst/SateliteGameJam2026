@@ -22,7 +22,7 @@ PluginImporter:
         Exclude Win: 0
         Exclude Win64: 1
   - first:
-      Any: 
+      Any:
     second:
       enabled: 1
       settings: {}

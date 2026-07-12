@@ -1,19 +1,17 @@
-using System.Threading.Tasks;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
 using UnityEngine.UI;
+using SatelliteGameJam.Networking.Core;
 
 // Displays active unranked lobbies in a ScrollView and joins on click
 public class UnrankedLobbiesView : MonoBehaviour
 {
+    private const float RefreshIntervalSeconds = 5f;
+
     [Header("UI References")]
     [SerializeField] private RectTransform contentRoot;   // Assign ScrollView content transform
     [SerializeField] private Button lobbyItemButtonPrefab; // Assign a Button prefab with a Text child
-    [SerializeField] private bool autoRefreshOnEnable = true;
-    [SerializeField] private float refreshInterval = 30f;
-    [SerializeField] private string LobbyScene = "LobbyScene";
-
     [Header("Optional")]
     [SerializeField] private string emptyStateMessage = "No lobbies found";
 
@@ -26,7 +24,7 @@ public class UnrankedLobbiesView : MonoBehaviour
         }
 
         // create repeating refresh every 30 seconds
-        InvokeRepeating(nameof(RefreshList), 0f, 5f);
+        InvokeRepeating(nameof(RefreshList), 0f, RefreshIntervalSeconds);
     }
 
     public async void RefreshList()
@@ -94,31 +92,10 @@ public class UnrankedLobbiesView : MonoBehaviour
             return;
         }
 
-        // Leave current lobby if any
-        if (SteamManager.Instance.currentLobby.Id.Value != 0)
+        if (!await SteamManager.Instance.JoinLobbyAsync(lobby, lobby.Owner.Id))
         {
-            SteamManager.Instance.LeaveLobby();
-        }
-
-        // Attempt join
-        RoomEnter result = await lobby.Join();
-        if (result != RoomEnter.Success)
-        {
-            Debug.Log("Failed to join lobby: " + result);
             return;
         }
-
-        // Set opponent to lobby owner (host) so OnLobbyEntered/flow can proceed
-        SteamManager.Instance.currentLobby = lobby;
-        SteamManager.Instance.LobbyPartner = lobby.Owner;
-
-        // Proactively accept P2P in case callback order differs
-        try { SteamNetworking.AcceptP2PSessionWithUser(lobby.Owner.Id); } catch { }
-
-        Debug.Log($"Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}");
-
-        // go to lobby scene
-        UnityEngine.SceneManagement.SceneManager.LoadScene(LobbyScene);
     }
 
     private void ClearContent()
