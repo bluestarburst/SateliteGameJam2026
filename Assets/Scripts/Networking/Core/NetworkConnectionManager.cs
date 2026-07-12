@@ -319,23 +319,22 @@ namespace SatelliteGameJam.Networking.Core
         NetworkSceneId playerScene = state?.Scene ?? NetworkSceneId.None;
         PlayerRole playerRole = state?.Role ?? PlayerRole.None;
 
-        var playerTag = instance.GetComponent<NetworkPlayerTag>();
-        if (playerTag == null)
+        var remoteAvatar = instance.GetComponent<RemotePlayerAvatar>();
+        if (remoteAvatar != null)
         {
-            playerTag = instance.AddComponent<NetworkPlayerTag>();
+            remoteAvatar.Configure(steamId, displayName, roleVisualProfile);
         }
-
-        playerTag.Configure(
-            steamId,
-            displayName,
-            NetworkPlayerKind.Remote,
-            playerRole,
-            playerScene);
-
-        GameObject visualPrefab = roleVisualProfile != null ? roleVisualProfile.Resolve(playerRole, playerScene) : null;
-        if (visualPrefab != null)
+        else
         {
-            composition.ApplyVisual(visualPrefab);
+            // Compatibility for existing third-party or prototype remote prefabs.
+            var playerTag = instance.GetComponent<NetworkPlayerTag>() ?? instance.AddComponent<NetworkPlayerTag>();
+            playerTag.Configure(steamId, displayName, NetworkPlayerKind.Remote, playerRole, playerScene);
+
+            GameObject visualPrefab = roleVisualProfile != null ? roleVisualProfile.Resolve(playerRole, playerScene) : null;
+            if (visualPrefab != null)
+            {
+                composition.ApplyVisual(visualPrefab);
+            }
         }
 
         VoiceSessionManager.Instance?.RegisterRemotePlayerAvatar(steamId, instance);

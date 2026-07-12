@@ -422,6 +422,12 @@ namespace SatelliteGameJam.Networking.State
                     Debug.Log($"[SceneSync] Late spawn: {displayName} joined scene {sceneId}");
                 }
             }
+            else
+            {
+                // A remote avatar is scene-local presentation, not a persistent player object.
+                // Their authoritative state and voice binding can persist independently.
+                NetworkConnectionManager.Instance?.DespawnRemotePlayer(steamId);
+            }
         }
 
         private string ResolveSceneName(NetworkSceneId sceneId)

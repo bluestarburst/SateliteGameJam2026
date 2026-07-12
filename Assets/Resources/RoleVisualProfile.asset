@@ -15,7 +15,7 @@ MonoBehaviour:
   entries:
   - role: 2
     scene: 2
-    visualPrefab: {fileID: 0}
+    visualPrefab: {fileID: 6023971640285371942, guid: c9810750ccd543d7a1ca330d76f01454, type: 3}
   - role: 3
     scene: 3
-    visualPrefab: {fileID: 0}
+    visualPrefab: {fileID: 6023971640285371942, guid: c9810750ccd543d7a1ca330d76f01454, type: 3}

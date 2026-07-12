@@ -1,5 +1,6 @@
 using UnityEngine;
 using Steamworks;
+using SatelliteGameJam.Players;
 
 namespace SatelliteGameJam.Networking.Core
 {
@@ -21,6 +22,9 @@ namespace SatelliteGameJam.Networking.Core
         
         [Tooltip("Prefab to instantiate for remote players")]
         public GameObject remotePlayerPrefab;
+
+        [Tooltip("Role and scene mapping for locally playable player-rig prefabs")]
+        public PlayerRigCatalog playerRigCatalog;
         
         [Header("Scene Management")]
         [Tooltip("Optional global game flow definition. When assigned, scene routing should resolve through this asset first.")]

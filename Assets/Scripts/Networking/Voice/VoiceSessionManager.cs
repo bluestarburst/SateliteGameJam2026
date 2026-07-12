@@ -112,6 +112,10 @@ namespace SatelliteGameJam.Networking.Voice
             if (avatarPlayer == null)
             {
                 avatarPlayer = avatar.AddComponent<VoiceRemotePlayer>();
+            }
+
+            if (!avatarPlayer.IsInitialized)
+            {
                 avatarPlayer.Initialize(steamId);
             }
 

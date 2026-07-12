@@ -5,6 +5,7 @@ using SatelliteGameJam.Networking;
 using SatelliteGameJam.Networking.Messages;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Sync;
+using SatelliteGameJam.Players;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -148,9 +149,10 @@ namespace SatelliteGameJam.Networking.Core.Editor
                         errors.Add($"{entry.sceneName}: gameplay scene does not resolve to a default player role.");
                     }
 
-                    if (FindInScene<LocalPlayerNetworkSetup>(scene) == null)
+                    if (FindInScene<LocalPlayerNetworkSetup>(scene) == null &&
+                        FindInScene<ScenePlayerBootstrap>(scene) == null)
                     {
-                        errors.Add($"{entry.sceneName}: gameplay scene has no LocalPlayerNetworkSetup.");
+                        errors.Add($"{entry.sceneName}: gameplay scene has no LocalPlayerNetworkSetup or ScenePlayerBootstrap.");
                     }
                 }
             }

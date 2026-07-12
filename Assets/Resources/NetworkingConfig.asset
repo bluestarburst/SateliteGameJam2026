@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   steamAppId: 480
   autoSpawnPlayers: 1
-  remotePlayerPrefab: {fileID: 5846698319945338779, guid: 1d02b7c9326374a1787e0c3b660f033e, type: 3}
+  remotePlayerPrefab: {fileID: 1090182736459182736, guid: b36739ea0ce447af9a4f3f5cf1d0dc85, type: 3}
+  playerRigCatalog: {fileID: 11400000, guid: 7ea1c9f6b3cc4d48aa48dfab10a0b1ce, type: 2}
   gameFlowDefinition: {fileID: 11400000, guid: c1d5436cbfac14cfb80f75fffe7826dd, type: 2}
   sceneChangeTimeoutSeconds: 10
   voiceChatEnabled: 1
