@@ -301,7 +301,9 @@ public class SteamManager : MonoBehaviour
 
         ActivateLobby(lobby, forceLobbyRoute: false);
 
-        if (lobby.MemberCount != 1 && ShouldRouteToLobbyFromSteamEvent())
+        // An invite join waits for the host's PlayerSceneState assignment. Loading Lobby here
+        // can finish after that assignment and overwrite the authoritative gameplay scene.
+        if (!isLobbyTransitionInProgress && lobby.MemberCount != 1 && ShouldRouteToLobbyFromSteamEvent())
         {
             RouteToLobbyScene();
         }
@@ -435,7 +437,7 @@ public class SteamManager : MonoBehaviour
 
         if (HasActiveLobby && currentLobby.Id == lobby.Id)
         {
-            ActivateLobby(lobby, forceLobbyRoute: true, inviter);
+            ActivateLobby(lobby, forceLobbyRoute: false, inviter);
             return true;
         }
 
@@ -453,7 +455,9 @@ public class SteamManager : MonoBehaviour
                 return false;
             }
 
-            ActivateLobby(lobby, forceLobbyRoute: true, inviter);
+            // SceneSyncManager receives the host's role/scene assignment after the lobby join.
+            // Do not load Lobby as an intermediate scene; it can overwrite that assignment.
+            ActivateLobby(lobby, forceLobbyRoute: false, inviter);
             Debug.Log($"[SteamManager] Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}.");
             return true;
         }

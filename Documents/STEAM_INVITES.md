@@ -23,7 +23,8 @@ When the running client accepts an invite, `SteamManager.JoinLobbyAsync` now:
 
 1. Leaves its old lobby and clears remote avatars, voice, player state, transition work, and stale
    satellite state.
-2. Joins the host lobby and routes through Lobby as a neutral waiting scene.
+2. Joins the host lobby and waits for the host's scene assignment without loading an intermediate
+   local scene.
 3. Lets the lobby host send the existing role/scene assignment. A mid-round joiner then loads the
    host-selected gameplay scene and receives the normal late-join snapshot.
 
