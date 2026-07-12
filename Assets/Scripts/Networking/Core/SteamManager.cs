@@ -761,11 +761,6 @@ public class SteamManager : MonoBehaviour
         role = PlayerRole.None;
         scene = NetworkSceneId.None;
 
-        if (!IsDevelopmentSessionActive)
-        {
-            return false;
-        }
-
         GameFlowDefinition definition = SceneFlowController.Instance?.Definition ??
             NetworkingConfiguration.Instance?.gameFlowDefinition;
         if (definition == null)
@@ -773,7 +768,21 @@ public class SteamManager : MonoBehaviour
             return false;
         }
 
+        NetworkSceneId activeScene = NetworkSceneId.None;
+        bool hasMappedGameplayScene = SceneFlowController.Instance != null &&
+            SceneFlowController.Instance.TryGetSceneId(SceneManager.GetActiveScene().name, out activeScene) &&
+            (activeScene == NetworkSceneId.GroundControl || activeScene == NetworkSceneId.SpaceStation);
+        if (!IsDevelopmentSessionActive && !(definition.DevSession.enabled && hasMappedGameplayScene))
+        {
+            return false;
+        }
+
         PlayerRole localRole = PlayerStateManager.Instance?.GetPlayerState(PlayerSteamId).Role ?? PlayerRole.None;
+        if (localRole == PlayerRole.None && hasMappedGameplayScene)
+        {
+            localRole = definition.ResolveDevelopmentLocalRole(activeScene);
+        }
+
         role = definition.ResolveDevelopmentJoinRole(localRole);
         scene = definition.ResolveDevelopmentJoinScene(role);
         return role != PlayerRole.None && scene != NetworkSceneId.None;

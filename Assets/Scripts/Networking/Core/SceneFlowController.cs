@@ -24,6 +24,11 @@ namespace SatelliteGameJam.Networking.Core
         [Header("Debug")]
         [SerializeField] private bool verboseLogging = true;
 
+        // SceneManager.LoadScene calls can overlap while a Steam lobby callback and a prior UI
+        // route arrive in the same frame. Keep the host-assigned destination authoritative.
+        private NetworkSceneId requestedLocalScene = NetworkSceneId.None;
+        private bool reassertingRequestedScene;
+
         public GameFlowDefinition Definition => ResolveFlowDefinition();
 
         private void Awake()
@@ -131,8 +136,11 @@ namespace SatelliteGameJam.Networking.Core
                 return false;
             }
 
+            requestedLocalScene = sceneId;
+
             if (SceneManager.GetActiveScene().name == sceneName)
             {
+                requestedLocalScene = NetworkSceneId.None;
                 return true;
             }
 
@@ -234,8 +242,39 @@ namespace SatelliteGameJam.Networking.Core
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            if (requestedLocalScene != NetworkSceneId.None &&
+                TryGetSceneId(scene.name, out NetworkSceneId loadedScene) &&
+                loadedScene != requestedLocalScene)
+            {
+                if (verboseLogging)
+                {
+                    Debug.Log($"[SceneFlowController] Ignoring stale scene '{scene.name}'; waiting for {requestedLocalScene}.");
+                }
+
+                if (!reassertingRequestedScene)
+                {
+                    StartCoroutine(ReassertRequestedScene());
+                }
+
+                return;
+            }
+
+            requestedLocalScene = NetworkSceneId.None;
             SynchronizeLocalPresence(scene.name);
 
+        }
+
+        private System.Collections.IEnumerator ReassertRequestedScene()
+        {
+            reassertingRequestedScene = true;
+            yield return null;
+
+            NetworkSceneId target = requestedLocalScene;
+            reassertingRequestedScene = false;
+            if (target != NetworkSceneId.None)
+            {
+                LoadSceneForLocal(target);
+            }
         }
 
         private void SynchronizeLocalPresence(string sceneName)
