@@ -203,7 +203,10 @@ namespace SatelliteGameJam.Networking.Core
         // Send to all peers via SteamManager.Instance.currentLobby.Members
         if (SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
         {
-            Debug.LogWarning($"Cannot send data - not connected to a lobby. channel={channel} bytes={(data != null ? data.Length : 0)}");
+            if (config != null && config.verboseLogging)
+            {
+                Debug.Log($"[NetworkConnectionManager] Skipped send before lobby join. channel={channel} bytes={(data != null ? data.Length : 0)}");
+            }
             return;
         }
         foreach (var member in SteamManager.Instance.currentLobby.Members)
@@ -371,7 +374,10 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void CleanupAllRemotePlayers()
     {
-        Debug.Log($"[NetworkConnectionManager] Cleaning up {spawnedRemotePlayers.Count} remote player models");
+        if (spawnedRemotePlayers.Count > 0 && config != null && config.verboseLogging)
+        {
+            Debug.Log($"[NetworkConnectionManager] Cleaning up {spawnedRemotePlayers.Count} remote player models");
+        }
         
         foreach (var kvp in spawnedRemotePlayers)
         {

@@ -76,7 +76,6 @@ namespace SatelliteGameJam.Networking.State
 
         if (NetworkConnectionManager.Instance == null)
         {
-            Debug.LogWarning("PlayerStateManager: NetworkConnectionManager not found. Retrying...");
             Invoke(nameof(RepeatUntilRegistered), 0.5f);
             return;
         }

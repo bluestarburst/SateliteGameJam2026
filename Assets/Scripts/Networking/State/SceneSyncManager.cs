@@ -64,7 +64,7 @@ namespace SatelliteGameJam.Networking.State
 
             if (NetworkConnectionManager.Instance == null)
             {
-                Debug.LogWarning("[SceneSync] NetworkConnectionManager not found. Retrying...");
+                if (logDebug) Debug.Log("[SceneSync] Waiting for NetworkConnectionManager before registering handlers");
                 Invoke(nameof(RegisterHandlers), 0.5f);
                 return;
             }

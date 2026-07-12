@@ -34,56 +34,58 @@ public class GroundPlayerInteractor : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (InteractAction.action.WasPressedThisFrame()) {
-            // Debug.Log("Interact button pressed");
-            Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
-            if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
-                if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
-                    interactObj.Interact(this);
-                }
-            }
-        }
-
-        if (EscapeAction.action.WasPressedThisFrame()) {
-            // Debug.Log("Interact button pressed");
-            Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
-            if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
-                if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
-                    interactObj.Escape(this);
-                }
-            }
-        }
-
-        Vector2 scrollDelta = ScrollAction.action.ReadValue<Vector2>();
-        if (scrollDelta != Vector2.zero)
+        if (WasPressedThisFrame(InteractAction) && TryGetInteractable(out IInteractable interactObj))
         {
-            float vertical = scrollDelta.y;
-
-            // Debug.Log("Scroll " + (vertical > 0 ? "UP" : "DOWN") + " detected");
-            Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
-            if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
-                if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
-                    interactObj.OnScroll(this, vertical);
-                }
-            }
+            interactObj.Interact(this);
         }
+
+        if (WasPressedThisFrame(EscapeAction) && TryGetInteractable(out interactObj))
+        {
+            interactObj.Escape(this);
+        }
+
+        Vector2 scrollDelta = ScrollAction != null && ScrollAction.action != null
+            ? ScrollAction.action.ReadValue<Vector2>()
+            : Vector2.zero;
+        if (scrollDelta != Vector2.zero && TryGetInteractable(out interactObj))
+        {
+            interactObj.OnScroll(this, scrollDelta.y);
+        }
+    }
+
+    private static bool WasPressedThisFrame(InputActionReference actionReference)
+    {
+        return actionReference != null && actionReference.action != null && actionReference.action.WasPressedThisFrame();
+    }
+
+    private bool TryGetInteractable(out IInteractable interactable)
+    {
+        interactable = null;
+        if (InteractorSource == null || InteractRange <= 0f)
+        {
+            return false;
+        }
+
+        Ray ray = new Ray(InteractorSource.position, InteractorSource.forward);
+        return Physics.Raycast(ray, out RaycastHit hitInfo, InteractRange) &&
+            hitInfo.collider.gameObject.TryGetComponent(out interactable);
     }
 
     public void restrictMovementTo(Vector3 coord, float distance)
     {
-        movement.tetherTo(coord, distance);
+        movement?.tetherTo(coord, distance);
     }
 
     public void releaseMovement()
     {
-        movement.untether();
+        movement?.untether();
     }
 
     public void lockPlayer() {
-        movement.lockPlayer();
+        movement?.lockPlayer();
     }
 
     public void unlockPlayer() {
-        movement.unlockPlayer();
+        movement?.unlockPlayer();
     }
 }
