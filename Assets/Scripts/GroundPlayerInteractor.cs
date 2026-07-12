@@ -1,10 +1,15 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-interface IInteractable {
+public interface IInteractable {
     public void Interact(GroundPlayerInteractor interactor);
+    public void Place(GroundPlayerInteractor interactor, IPlaceLocation loc);
     public void Click(GroundPlayerInteractor interactor);
     public void OnScroll(GroundPlayerInteractor interactor, float vertical);
+}
+
+public interface IPlaceLocation {
+    public void Suggest(IInteractable obj);
 }
 
 public class GroundPlayerInteractor : MonoBehaviour
@@ -12,6 +17,7 @@ public class GroundPlayerInteractor : MonoBehaviour
     public InputActionReference InteractAction;
     public InputActionReference ScrollAction;
     public InputActionReference ClickAction;
+    public InputActionReference PlaceAction;
     public Transform InteractorSource;
     public Transform HoldPoint;
     public float InteractRange;
@@ -40,6 +46,38 @@ public class GroundPlayerInteractor : MonoBehaviour
                 if (hitInfo.collider.gameObject.TryGetComponent(out IInteractable interactObj)) {
                     interactObj.Interact(this);
                     heldObject = interactObj;
+                }
+            }
+        }
+
+        if (PlaceAction.action.IsPressed()) {
+            if (heldObject == null) {
+                return;
+            }
+
+            FileCrateInteract crate = GetComponentInChildren<FileCrateInteract>();
+            if (crate != null) {
+                Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
+                if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
+                    if (hitInfo.collider.gameObject.TryGetComponent(out IPlaceLocation placeloc)) {
+                        placeloc.Suggest(heldObject);
+                    }
+                }
+            }
+        }
+
+        if (PlaceAction.action.WasReleasedThisFrame()) {
+            if (heldObject == null) {
+                return;
+            }
+
+            FileCrateInteract crate = GetComponentInChildren<FileCrateInteract>();
+            if (crate != null) {
+                Ray r = new Ray(InteractorSource.position, InteractorSource.forward);
+                if (Physics.Raycast(r, out RaycastHit hitInfo, InteractRange)) {
+                    if (hitInfo.collider.gameObject.TryGetComponent(out IPlaceLocation placeloc)) {
+                        heldObject.Place(this, placeloc);
+                    }
                 }
             }
         }

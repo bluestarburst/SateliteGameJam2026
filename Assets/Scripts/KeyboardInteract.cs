@@ -11,4 +11,7 @@ public class KeyboardInteract : MonoBehaviour, IInteractable
     public void Click(GroundPlayerInteractor interactor) {
         //nothing
     }
+    public void Place(GroundPlayerInteractor interactor, IPlaceLocation loc) {
+        //nothing
+    }
 }

@@ -64,6 +64,10 @@ public class FileCrateInteract : MonoBehaviour, IInteractable
         Debug.Log(selectedFolder);
     }
 
+    public void Place(GroundPlayerInteractor interactor, IPlaceLocation loc) {
+        //nothing
+    }
+
     void UpdateFolderVisuals() {
         if (folders == null) return;
 
