@@ -328,8 +328,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   controller: {fileID: 8611268933351707410}
-  moveAction: {fileID: 0}
-  jumpAction: {fileID: 0}
+  playerCamera: {fileID: 7441822766895629408}
+  moveAction: {fileID: 910000000000000001}
+  jumpAction: {fileID: 910000000000000002}
   gravityValue: -9.81
   sensitivity: 0.5
 --- !u!114 &1718720506106928987
@@ -344,9 +345,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8a26474b46bc5143bf4d6f4bf5731e4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
-  InteractAction: {fileID: 0}
-  EscapeAction: {fileID: 0}
-  ScrollAction: {fileID: 0}
+  InteractAction: {fileID: 910000000000000003}
+  EscapeAction: {fileID: 910000000000000004}
+  ScrollAction: {fileID: 910000000000000005}
   InteractorSource: {fileID: 7441822766895629408}
   InteractRange: 2
 --- !u!114 &849040888489056587
@@ -391,8 +392,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SatelliteGameJam.Players.PlayerRig
   role: 2
   scene: 2
-  cameraRoot: {fileID: 0}
-  interactionOrigin: {fileID: 0}
+  cameraRoot: {fileID: 7441822766895629408}
+  interactionOrigin: {fileID: 7441822766895629408}
 --- !u!1001 &7527629691866076801
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -470,3 +471,73 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: ff86a46d5bd21a6468eaa30abb1be99d, type: 3}
   m_PrefabInstance: {fileID: 7527629691866076801}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &910000000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc1515ab76e54f068e2f2207940fab32, type: 3}
+  m_Name: Player/Move
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
+  m_Asset: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_ActionId: 351f2ccd-1f9f-44bf-9bec-d62ac5c5f408
+--- !u!114 &910000000000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc1515ab76e54f068e2f2207940fab32, type: 3}
+  m_Name: Player/Jump
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
+  m_Asset: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_ActionId: f1ba0d36-48eb-4cd5-b651-1c94a6531f70
+--- !u!114 &910000000000000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc1515ab76e54f068e2f2207940fab32, type: 3}
+  m_Name: Player/Interact
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
+  m_Asset: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_ActionId: 852140f2-7766-474d-8707-702459ba45f3
+--- !u!114 &910000000000000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc1515ab76e54f068e2f2207940fab32, type: 3}
+  m_Name: Player/Escape
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
+  m_Asset: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_ActionId: e5d47159-56a2-4b80-992b-f84354a45b84
+--- !u!114 &910000000000000005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc1515ab76e54f068e2f2207940fab32, type: 3}
+  m_Name: UI/ScrollWheel
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
+  m_Asset: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_ActionId: 0489e84a-4833-4c40-bfae-cea84b696689

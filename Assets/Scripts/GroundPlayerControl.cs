@@ -3,8 +3,10 @@ using UnityEngine.InputSystem;
 
 public class GroundPlayerControl : MonoBehaviour
 {
-
     public CharacterController controller;
+
+    [Header("Camera")]
+    [SerializeField] private Transform playerCamera;
 
     [Header("Input Actions")]
     public InputActionReference moveAction;
@@ -24,6 +26,32 @@ public class GroundPlayerControl : MonoBehaviour
 
     private bool playerLocked = false;
 
+    private void Awake()
+    {
+        if (controller == null)
+        {
+            controller = GetComponent<CharacterController>();
+        }
+
+        if (playerCamera == null)
+        {
+            Camera childCamera = GetComponentInChildren<Camera>(true);
+            playerCamera = childCamera != null ? childCamera.transform : Camera.main?.transform;
+        }
+    }
+
+    private void OnEnable()
+    {
+        moveAction?.action?.Enable();
+        jumpAction?.action?.Enable();
+    }
+
+    private void OnDisable()
+    {
+        moveAction?.action?.Disable();
+        jumpAction?.action?.Disable();
+    }
+
     // Update is called once per frame
     void Update()
     {
@@ -34,30 +62,38 @@ public class GroundPlayerControl : MonoBehaviour
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
 
-        Movement();
         Rotation();
+        Movement();
     }
 
     private void Rotation()
     {
-        // new unity input system
+        if (playerCamera == null || Mouse.current == null)
+        {
+            return;
+        }
+
         Vector2 mouseInput = Mouse.current.delta.ReadValue();
 
-        // flip x and y for better control
         mouseInput = new Vector2(-mouseInput.y, mouseInput.x);
-        Camera.main.transform.Rotate(mouseInput * sensitivity);
+        playerCamera.Rotate(mouseInput * sensitivity);
 
-        float x = Camera.main.transform.rotation.eulerAngles.x;
+        float x = playerCamera.rotation.eulerAngles.x;
         if (x > 180f) x -= 360f;
 
         x = Mathf.Max(x, -85f);
         x = Mathf.Min(x, 85f);
 
-        Camera.main.transform.rotation = Quaternion.Euler(x, Camera.main.transform.rotation.eulerAngles.y, 0);
+        playerCamera.rotation = Quaternion.Euler(x, playerCamera.rotation.eulerAngles.y, 0);
     }
 
     private void Movement()
     {
+        if (controller == null || playerCamera == null)
+        {
+            return;
+        }
+
         groundedPlayer = controller.isGrounded;
 
         if (groundedPlayer)
@@ -68,7 +104,9 @@ public class GroundPlayerControl : MonoBehaviour
         }
 
         // Read input
-        Vector2 input = moveAction.action.ReadValue<Vector2>();
+        Vector2 input = moveAction != null && moveAction.action != null
+            ? moveAction.action.ReadValue<Vector2>()
+            : Vector2.zero;
         Vector3 move = new Vector3(input.x, 0, input.y);
         move = Vector3.ClampMagnitude(move, 1f);
 
@@ -83,7 +121,7 @@ public class GroundPlayerControl : MonoBehaviour
 
         // Move
         Vector3 finalMove = playerSpeed * (move + playerVelocity);
-        finalMove = Quaternion.Euler(0, Camera.main.transform.rotation.eulerAngles.y, 0) * finalMove;
+        finalMove = Quaternion.Euler(0, playerCamera.rotation.eulerAngles.y, 0) * finalMove;
 
         Vector3 currentPosition = transform.position;
         Vector3 predictedMove = currentPosition + finalMove * Time.deltaTime;
