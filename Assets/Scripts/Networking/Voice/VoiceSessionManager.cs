@@ -170,6 +170,18 @@ namespace SatelliteGameJam.Networking.Voice
             }
         }
 
+        /// <summary>Disposes all lobby-specific voice playback before changing lobbies.</summary>
+        public void ResetForLobbyTransition()
+        {
+            foreach (SteamId steamId in new List<SteamId>(bindings.Keys))
+            {
+                UnregisterRemotePlayer(steamId);
+            }
+
+            playersAtConsole.Clear();
+            isLocalPlayerAtConsole = false;
+        }
+
         public VoiceRemotePlayer GetOrCreateVoiceRemotePlayer(SteamId steamId)
         {
             VoiceBinding binding = GetOrCreateBinding(steamId);

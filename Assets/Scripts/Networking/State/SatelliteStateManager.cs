@@ -58,6 +58,7 @@ namespace SatelliteGameJam.Networking.State
 
         private float nextSendTime;
         private bool isDirty = false; // Track if state has changed
+        private float initialHealth;
 
         // Events for UI/game logic
         public event Action<float> OnHealthChanged;
@@ -77,6 +78,7 @@ namespace SatelliteGameJam.Networking.State
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            initialHealth = health;
             InitializeModuleStates();
 
             // Register message handlers
@@ -147,6 +149,18 @@ namespace SatelliteGameJam.Networking.State
         }
 
         // ===== Public API for game logic =====
+
+        /// <summary>Returns persistent gameplay state to its scene-configured defaults for a new lobby.</summary>
+        public void ResetForLobbyTransition()
+        {
+            health = initialHealth;
+            consoleStates.Clear();
+            partTransforms.Clear();
+            nextSendTime = 0f;
+            isDirty = false;
+            ApplyDamageBits(0, true);
+            OnHealthChanged?.Invoke(health);
+        }
 
         /// <summary>
         /// Sets the satellite health. Only authority should call this.

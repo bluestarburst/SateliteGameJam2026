@@ -92,35 +92,10 @@ public class UnrankedLobbiesView : MonoBehaviour
             return;
         }
 
-        // Leave current lobby if any
-        if (SteamManager.Instance.currentLobby.Id.Value != 0)
-        {
-            SteamManager.Instance.LeaveLobby();
-        }
-
-        // Attempt join
-        RoomEnter result = await lobby.Join();
-        if (result != RoomEnter.Success)
-        {
-            Debug.Log("Failed to join lobby: " + result);
-            return;
-        }
-
-        // Set opponent to lobby owner (host) so OnLobbyEntered/flow can proceed
-        SteamManager.Instance.currentLobby = lobby;
-        SteamManager.Instance.LobbyPartner = lobby.Owner;
-
-        // Proactively accept P2P in case callback order differs
-        try { SteamNetworking.AcceptP2PSessionWithUser(lobby.Owner.Id); } catch { }
-
-        Debug.Log($"Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}");
-
-        if (SceneFlowController.Instance != null && SceneFlowController.Instance.LoadLobbyScene())
+        if (!await SteamManager.Instance.JoinLobbyAsync(lobby, lobby.Owner.Id))
         {
             return;
         }
-
-        Debug.LogWarning("[UnrankedLobbiesView] Joined the lobby, but SceneFlowController is unavailable for scene routing.");
     }
 
     private void ClearContent()

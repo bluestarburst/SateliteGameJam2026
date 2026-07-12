@@ -135,6 +135,14 @@ namespace SatelliteGameJam.Networking.State
             BeginAckWindow();
         }
 
+        /// <summary>Stops transition work that belongs to the lobby being left.</summary>
+        public void ResetForLobbyTransition()
+        {
+            pendingAcks.Clear();
+            CancelInvoke(nameof(CheckAckTimeout));
+            CancelInvoke(nameof(SpawnPlayersForCurrentScene));
+        }
+
         private bool IsOwner()
         {
             return SteamManager.Instance != null && SteamManager.Instance.IsLocalPlayerLobbyHost;

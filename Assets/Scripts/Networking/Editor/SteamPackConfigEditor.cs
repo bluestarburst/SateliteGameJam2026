@@ -31,6 +31,7 @@ namespace SatelliteGameJam.Networking.Core.Editor
             }
 
             DrawManagerStatus((SteamPackConfig)target);
+            DrawRuntimeSessionTools();
         }
 
         private static void LoadDefaults(SteamPackConfig config)
@@ -141,6 +142,46 @@ namespace SatelliteGameJam.Networking.Core.Editor
                 DrawStatus<SceneFlowController>(config);
                 DrawStatus<SceneAudioAnchorManager>(config);
                 DrawStatus<NetworkDebugOverlay>(config);
+            }
+        }
+
+        private static void DrawRuntimeSessionTools()
+        {
+            EditorGUILayout.Space(10);
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField("Steam Session", EditorStyles.boldLabel);
+
+                if (!Application.isPlaying)
+                {
+                    EditorGUILayout.HelpBox("Enter Play Mode to create a lobby or open Steam's invite overlay.", MessageType.Info);
+                    return;
+                }
+
+                SteamManager manager = SteamManager.Instance;
+                bool steamReady = manager != null && manager.ConnectedToSteam();
+                EditorGUILayout.LabelField("Steam", steamReady ? "Connected" : "Unavailable");
+                EditorGUILayout.LabelField("Lobby", manager != null && manager.HasActiveLobby
+                    ? manager.currentLobby.Id.ToString()
+                    : "None");
+
+                using (new EditorGUI.DisabledScope(!steamReady))
+                {
+                    if (GUILayout.Button(manager != null && manager.HasActiveLobby
+                        ? "Invite Friends"
+                        : "Create Lobby And Invite Friends"))
+                    {
+                        manager.CreateJoinableLobbyAndOpenInvite();
+                    }
+
+                    using (new EditorGUI.DisabledScope(manager == null || !manager.HasActiveLobby))
+                    {
+                        if (GUILayout.Button("Leave Lobby And Reset Session"))
+                        {
+                            manager.LeaveLobby();
+                        }
+                    }
+                }
             }
         }
 

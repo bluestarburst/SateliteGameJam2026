@@ -261,6 +261,20 @@ namespace SatelliteGameJam.Networking.State
         }
     }
 
+    /// <summary>Clears state that belongs to a lobby being left before another lobby is joined.</summary>
+    public void ResetForLobbyTransition()
+    {
+        foreach (SteamId steamId in playerStates.Keys.ToList())
+        {
+            if (steamId != SteamManager.Instance?.PlayerSteamId)
+            {
+                OnPlayerLeft?.Invoke(steamId);
+            }
+        }
+
+        playerStates.Clear();
+    }
+
     public void SetPlayerConnected(SteamId steamId, bool isConnected)
     {
         if (steamId.Value == 0)

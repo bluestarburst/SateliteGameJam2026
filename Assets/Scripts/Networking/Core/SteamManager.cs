@@ -10,6 +10,7 @@ using UnityEngine.SceneManagement;
 using SatelliteGameJam.Networking.Core;
 using SatelliteGameJam.Networking.State;
 using SatelliteGameJam.Networking.Messages;
+using SatelliteGameJam.Networking.Voice;
 
 /// <summary>
 /// Steamworks entry point that mirrors the Facepunch Steamworks tutorial core loop.
@@ -44,6 +45,8 @@ public class SteamManager : MonoBehaviour
     private Lobby hostedMultiplayerLobby;
     private ulong authorityLobbyId;
     private SteamId lobbyHostId;
+    private bool isLobbyTransitionInProgress;
+    private ulong pendingLobbyId;
 
     // Socket state
     private SteamSocketManager steamSocketManager;
@@ -230,13 +233,13 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyMemberDisconnectedCallback(Lobby lobby, Friend friend)
     {
-        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
+        if (!ShouldAcceptLobbyCallback(lobby)) return;
         OtherLobbyMemberLeft(friend);
     }
 
     private void OnLobbyMemberLeaveCallback(Lobby lobby, Friend friend)
     {
-        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
+        if (!ShouldAcceptLobbyCallback(lobby)) return;
         OtherLobbyMemberLeft(friend);
     }
 
@@ -253,6 +256,11 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyGameCreatedCallback(Lobby lobby, uint ip, ushort port, SteamId steamId)
     {
+        if (!ShouldAcceptLobbyCallback(lobby))
+        {
+            return;
+        }
+
         CaptureLobbyHost(lobby);
         SyncRemoteMembersWithLobby(lobby);
         if (ShouldRouteToLobbyFromSteamEvent())
@@ -286,9 +294,12 @@ public class SteamManager : MonoBehaviour
 
     private void OnLobbyEnteredCallback(Lobby lobby)
     {
-        CaptureLobbyHost(lobby);
-        SyncRemoteMembersWithLobby(lobby);
-        PlayerStateManager.Instance?.HandleLocalLobbyEntered();
+        if (!ShouldAcceptLobbyCallback(lobby))
+        {
+            return;
+        }
+
+        ActivateLobby(lobby, forceLobbyRoute: false);
 
         if (lobby.MemberCount != 1 && ShouldRouteToLobbyFromSteamEvent())
         {
@@ -298,36 +309,7 @@ public class SteamManager : MonoBehaviour
 
     private async void OnGameLobbyJoinRequestedCallback(Lobby joinedLobby, SteamId id)
     {
-        RoomEnter joinedLobbySuccess = await joinedLobby.Join();
-        if (joinedLobbySuccess != RoomEnter.Success)
-        {
-            Debug.Log("failed to join lobby");
-            return;
-        }
-
-        foreach (Friend friend in SteamFriends.GetFriends())
-        {
-            if (friend.Id == id)
-            {
-                lobbyPartner = friend;
-                break;
-            }
-        }
-
-        foreach (var remote in remoteMembers.Keys.ToList())
-        {
-            RemoveRemoteMember(remote);
-        }
-        remoteMembers.Clear();
-
-        currentLobby = joinedLobby;
-        CaptureLobbyHost(joinedLobby);
-        SyncRemoteMembersWithLobby(joinedLobby);
-        PlayerStateManager.Instance?.HandleLocalLobbyEntered();
-        if (ShouldRouteToLobbyFromSteamEvent())
-        {
-            RouteToLobbyScene();
-        }
+        await JoinLobbyAsync(joinedLobby, id);
     }
 
     private void OnLobbyCreatedCallback(Result result, Lobby lobby)
@@ -342,7 +324,7 @@ public class SteamManager : MonoBehaviour
     private void OnLobbyMemberJoinedCallback(Lobby lobby, Friend friend)
     {
         Debug.Log("someone else joined lobby");
-        if (currentLobby.Id != 0 && lobby.Id != currentLobby.Id) return;
+        if (!ShouldAcceptLobbyCallback(lobby)) return;
         if (friend.Id == PlayerSteamId)
         {
             return;
@@ -399,9 +381,14 @@ public class SteamManager : MonoBehaviour
 
     public void LeaveLobby()
     {
+        ResetSessionForLobbyTransition();
+
         try
         {
-            currentLobby.Leave();
+            if (currentLobby.Id.Value != 0)
+            {
+                currentLobby.Leave();
+            }
         }
         catch
         {
@@ -413,8 +400,68 @@ public class SteamManager : MonoBehaviour
             RemoveRemoteMember(remote);
         }
         remoteMembers.Clear();
+        currentLobby = default;
+        hostedMultiplayerLobby = default;
         authorityLobbyId = 0;
         lobbyHostId = 0;
+        isHost = false;
+        IsDevelopmentSessionActive = false;
+        PlayerStateManager.Instance?.ResetForLobbyTransition();
+    }
+
+    /// <summary>
+    /// Leaves any current lobby, clears lobby-owned runtime state, then joins the requested lobby.
+    /// Steam invite callbacks and lobby-browser clicks both use this path.
+    /// </summary>
+    public async Task<bool> JoinLobbyAsync(Lobby lobby, SteamId inviter = default)
+    {
+        if (!ConnectedToSteam())
+        {
+            Debug.LogWarning("[SteamManager] Cannot join a lobby because Steam is not available.");
+            return false;
+        }
+
+        if (lobby.Id.Value == 0)
+        {
+            Debug.LogWarning("[SteamManager] Cannot join an invalid lobby.");
+            return false;
+        }
+
+        if (isLobbyTransitionInProgress)
+        {
+            Debug.LogWarning("[SteamManager] A lobby transition is already in progress.");
+            return false;
+        }
+
+        if (HasActiveLobby && currentLobby.Id == lobby.Id)
+        {
+            ActivateLobby(lobby, forceLobbyRoute: true, inviter);
+            return true;
+        }
+
+        isLobbyTransitionInProgress = true;
+        pendingLobbyId = lobby.Id.Value;
+        try
+        {
+            LeaveLobby();
+            isLobbyTransitionInProgress = true;
+
+            RoomEnter result = await lobby.Join();
+            if (result != RoomEnter.Success)
+            {
+                Debug.LogWarning($"[SteamManager] Failed to join lobby {lobby.Id}: {result}");
+                return false;
+            }
+
+            ActivateLobby(lobby, forceLobbyRoute: true, inviter);
+            Debug.Log($"[SteamManager] Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}.");
+            return true;
+        }
+        finally
+        {
+            pendingLobbyId = 0;
+            isLobbyTransitionInProgress = false;
+        }
     }
 
     public async Task<bool> CreateFriendLobby(int maxPlayers = 4)
@@ -436,6 +483,7 @@ public class SteamManager : MonoBehaviour
             currentLobby = hostedMultiplayerLobby;
             CaptureLobbyHost(hostedMultiplayerLobby);
             isHost = true;
+            PlayerStateManager.Instance?.HandleLocalLobbyEntered();
             return true;
         }
         catch (Exception exception)
@@ -468,6 +516,7 @@ public class SteamManager : MonoBehaviour
             currentLobby = hostedMultiplayerLobby;
             CaptureLobbyHost(hostedMultiplayerLobby);
             isHost = true;
+            PlayerStateManager.Instance?.HandleLocalLobbyEntered();
             return true;
         }
         catch (Exception exception)
@@ -480,10 +529,36 @@ public class SteamManager : MonoBehaviour
 
     public void OpenFriendOverlayForGameInvite()
     {
-        if (HasActiveLobby)
+        if (!ConnectedToSteam())
         {
-            SteamFriends.OpenGameInviteOverlay(currentLobby.Id);
+            Debug.LogWarning("[SteamManager] Steam overlay is unavailable because Steam is not initialized.");
+            return;
         }
+
+        if (!HasActiveLobby)
+        {
+            Debug.LogWarning("[SteamManager] Create or join a lobby before inviting friends.");
+            return;
+        }
+
+        SteamFriends.OpenGameInviteOverlay(currentLobby.Id);
+    }
+
+    /// <summary>Creates a public joinable lobby when necessary, then opens Steam's invite UI.</summary>
+    public async void CreateJoinableLobbyAndOpenInvite()
+    {
+        if (!ConnectedToSteam())
+        {
+            Debug.LogWarning("[SteamManager] Steam is unavailable, so an invite lobby cannot be created.");
+            return;
+        }
+
+        if (!HasActiveLobby && !await CreateLobby(0))
+        {
+            return;
+        }
+
+        OpenFriendOverlayForGameInvite();
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode loadSceneMode)
@@ -540,6 +615,53 @@ public class SteamManager : MonoBehaviour
 
         authorityLobbyId = lobby.Id.Value;
         lobbyHostId = lobby.Owner.Id;
+    }
+
+    private bool ShouldAcceptLobbyCallback(Lobby lobby)
+    {
+        if (!isLobbyTransitionInProgress || pendingLobbyId == 0)
+        {
+            return currentLobby.Id.Value != 0 && currentLobby.Id == lobby.Id;
+        }
+
+        return lobby.Id.Value == pendingLobbyId;
+    }
+
+    private void ActivateLobby(Lobby lobby, bool forceLobbyRoute, SteamId inviter = default)
+    {
+        bool newLobby = currentLobby.Id != lobby.Id;
+        currentLobby = lobby;
+        hostedMultiplayerLobby = default;
+        isHost = lobby.Owner.Id == PlayerSteamId;
+        CaptureLobbyHost(lobby);
+
+        if (inviter.Value != 0)
+        {
+            lobbyPartner = SteamFriends.GetFriends().FirstOrDefault(friend => friend.Id == inviter);
+        }
+        else
+        {
+            lobbyPartner = lobby.Owner;
+        }
+
+        SyncRemoteMembersWithLobby(lobby);
+        if (newLobby)
+        {
+            PlayerStateManager.Instance?.HandleLocalLobbyEntered();
+        }
+
+        if (forceLobbyRoute)
+        {
+            RouteToLobbyScene();
+        }
+    }
+
+    private void ResetSessionForLobbyTransition()
+    {
+        SceneSyncManager.Instance?.ResetForLobbyTransition();
+        NetworkConnectionManager.Instance?.CleanupAllRemotePlayers();
+        VoiceSessionManager.Instance?.ResetForLobbyTransition();
+        SatelliteStateManager.Instance?.ResetForLobbyTransition();
     }
 
     private void SyncRemoteMembersWithLobby(Lobby lobby)
