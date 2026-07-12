@@ -2,7 +2,7 @@
 
 ## Running the Game
 
-1. Open project in Unity 2023.2+
+1. Open project in the Unity version recorded in `ProjectSettings/ProjectVersion.txt`
 2. Open `Matchmaking` scene (`Assets/Scenes/Matchmaking.unity`)
 3. Press Play
 4. Create or join a lobby
@@ -13,6 +13,15 @@
 
 - **Tab** - Toggle network debug overlay (shows connected peers, packet stats, role info)
 - Enable `verboseLogging` in NetworkingConfiguration for detailed packet logs
+
+## Direct Scene Debugging
+
+`GameFlowDefinition` owns the development-session profile. With it enabled, pressing Play from
+`Matchmaking`, `Lobby`, `BaseStation`, or `Satellite` keeps that scene open, assigns its configured
+local role, and creates a joinable Steam lobby. A joining player receives the configured join role
+and scene from the lobby host.
+
+Use `Tools > Networking > Validate Game Flow` after changing scene mappings or the SteamPack prefab.
 
 ---
 
@@ -169,6 +178,7 @@ NetworkConnectionManager.Instance.SendMessageToAll(msg);
 
 ### Any Networked Scene
 - [ ] `SteamPack` prefab in scene (contains all managers including NetworkSyncManager)
+- [ ] Scene appears in `GameFlowDefinition` and is enabled in Build Settings
 
 ### Lobby Scene
 - [ ] `LobbyNetworkingManager` component on a GameObject
@@ -176,11 +186,13 @@ NetworkConnectionManager.Instance.SendMessageToAll(msg);
 
 ### Ground Control Scene
 - [ ] `GroundControlSceneManager` component
+- [ ] Local player has `LocalPlayerNetworkSetup`
 - [ ] Transmission console with trigger to call `OnConsoleInteractionStarted/Ended`
 - [ ] UI to display satellite health
 
 ### Space Station Scene
 - [ ] `SpaceStationSceneManager` component
+- [ ] Local player has `LocalPlayerNetworkSetup`
 - [ ] Interactable objects with `NetworkInteractionState`
 - [ ] Repair points
 
@@ -207,6 +219,6 @@ NetworkConnectionManager.Instance.SendMessageToAll(msg);
 4. Check owner SteamId is set correctly
 
 ### Satellite state not updating
-1. Only authority (lowest SteamId) can modify state
+1. Only the current Steam lobby host can authoritatively modify state
 2. Check `SatelliteStateManager` is initialized
 3. Verify you're calling the correct methods (SetHealth, etc.)

@@ -23,6 +23,7 @@ namespace SatelliteGameJam.Networking.Voice
         public static VoiceSessionManager Instance { get; private set; }
 
         [Header("Voice Rules")]
+        [HideInInspector]
         [SerializeField] private NetworkingConfiguration config;
         [SerializeField] private float fallbackSpaceProximityRadius = 20f;
         [SerializeField] private bool enableDebugLogs;

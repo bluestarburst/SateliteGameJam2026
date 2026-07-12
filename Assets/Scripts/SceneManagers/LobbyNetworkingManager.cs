@@ -27,18 +27,6 @@ namespace SatelliteGameJam.SceneManagers
         {
             config = NetworkingConfiguration.Instance;
 
-            // Set local player state to Lobby
-            if (PlayerStateManager.Instance != null)
-            {
-                PlayerStateManager.Instance.SetLocalPlayerScene(NetworkSceneId.Lobby);
-                PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.Lobby);
-                
-                if (logDebug || (config != null && config.verboseLogging))
-                {
-                    Debug.Log("[Lobby] Set local player to Lobby scene/role");
-                }
-            }
-
             // Spawn existing lobby members
             SpawnExistingPlayers();
 

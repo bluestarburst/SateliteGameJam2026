@@ -25,18 +25,6 @@ namespace SatelliteGameJam.SceneManagers
         {
             config = NetworkingConfiguration.Instance;
 
-            // Set local player role and scene
-            if (PlayerStateManager.Instance != null)
-            {
-                PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.GroundControl);
-                PlayerStateManager.Instance.SetLocalPlayerScene(NetworkSceneId.GroundControl);
-
-                if (logDebug || (config != null && config.verboseLogging))
-                {
-                    Debug.Log("[GroundControl] Set local player to Ground Control scene/role");
-                }
-            }
-
             // Set initial voice gating (not at console by default)
             UpdateVoiceGating();
 

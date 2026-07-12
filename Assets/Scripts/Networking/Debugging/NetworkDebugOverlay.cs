@@ -18,7 +18,8 @@ namespace SatelliteGameJam.Networking.Debugging
     {
         public static NetworkDebugOverlay Instance { get; private set; }
 
-        [SerializeField] NetworkingConfiguration config;
+        [HideInInspector]
+        [SerializeField] private NetworkingConfiguration config;
 
         [SerializeField] private bool startEnabled = true;
         [SerializeField] private Key toggleKey = Key.Tab;
@@ -276,7 +277,7 @@ namespace SatelliteGameJam.Networking.Debugging
         {
             GUILayout.Label("<b><color=yellow>NETWORK OBJECTS</color></b>", CreateRichTextStyle());
 
-            var allIdentities = FindObjectsOfType<NetworkIdentity>();
+            var allIdentities = FindObjectsByType<NetworkIdentity>(FindObjectsSortMode.None);
             GUILayout.Label($"Total Network Objects: <color=lime>{allIdentities.Length}</color>", CreateRichTextStyle());
 
             if (allIdentities.Length > 0)

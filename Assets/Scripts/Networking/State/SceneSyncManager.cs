@@ -20,26 +20,22 @@ namespace SatelliteGameJam.Networking.State
         public static SceneSyncManager Instance { get; private set; }
 
         [Header("Configuration")]
+        [HideInInspector]
         [SerializeField] private NetworkingConfiguration config;
+        [HideInInspector]
         [SerializeField] private SceneFlowController sceneFlowController;
 
-        [Header("Fallback Scene Names (if no config assigned)")]
-        [SerializeField] private string lobbySceneName = "Lobby";
-        [SerializeField] private string groundControlSceneName = "GroundControl";
-        [SerializeField] private string spaceStationSceneName = "SpaceStation";
+        private const float DefaultSceneChangeTimeoutSeconds = 10f;
 
         [Header("Behavior")]
-        [SerializeField] private float sceneChangeTimeoutSeconds = 10f;
         [SerializeField] private bool logDebug = true;
 
         private HashSet<SteamId> pendingAcks = new HashSet<SteamId>();
         private bool handlersRegistered;
 
-        // Properties for accessing configuration
-        private string LobbySceneName => GetFallbackSceneName(NetworkSceneId.Lobby);
-        private string GroundControlSceneName => GetFallbackSceneName(NetworkSceneId.GroundControl);
-        private string SpaceStationSceneName => GetFallbackSceneName(NetworkSceneId.SpaceStation);
-        private float SceneChangeTimeout => config != null ? config.sceneChangeTimeoutSeconds : sceneChangeTimeoutSeconds;
+        private float SceneChangeTimeout => config != null
+            ? config.sceneChangeTimeoutSeconds
+            : NetworkingConfiguration.Instance?.sceneChangeTimeoutSeconds ?? DefaultSceneChangeTimeoutSeconds;
 
         private void Awake()
         {
@@ -121,7 +117,6 @@ namespace SatelliteGameJam.Networking.State
                 return;
             }
 
-            GameStateManager.Instance?.SetInGame(true);
             BroadcastRoleBasedScenes();
             BeginAckWindow();
         }
@@ -136,7 +131,6 @@ namespace SatelliteGameJam.Networking.State
                 if (logDebug) Debug.Log("[SceneSync] Not lobby owner; cannot end game.");
                 return;
             }
-            GameStateManager.Instance?.SetInGame(false);
             BroadcastSceneForAll(NetworkSceneId.Lobby);
             BeginAckWindow();
         }
@@ -190,6 +184,19 @@ namespace SatelliteGameJam.Networking.State
             PlayerState state = PlayerStateManager.Instance.GetPlayerState(joiningPlayer);
             bool gameInProgress = IsGameInProgress();
             PlayerRole role = state.Role;
+
+            if (SteamManager.Instance.TryGetDevelopmentJoinAssignment(out PlayerRole developmentRole, out NetworkSceneId developmentScene))
+            {
+                PlayerStateManager.Instance.SetPlayerRoleFromAuthority(joiningPlayer, developmentRole);
+                PlayerStateManager.Instance.SetPlayerSceneFromAuthority(joiningPlayer, developmentScene, developmentRole);
+
+                if (logDebug)
+                {
+                    Debug.Log($"[SceneSync] Assigned development joiner {joiningPlayer} to role {developmentRole}, scene {developmentScene}");
+                }
+
+                yield break;
+            }
 
             if (role == PlayerRole.None || role == PlayerRole.Lobby)
             {
@@ -288,8 +295,8 @@ namespace SatelliteGameJam.Networking.State
             // Cleaning up on entry to Lobby would destroy those voice proxies immediately after creation
             bool isLobbyOrMatchmaking = sceneFlowController != null
                 ? sceneFlowController.IsLobbyOrMatchmakingScene(scene.name)
-                : scene.name == LobbySceneName || scene.name == "Matchmaking";
-            bool isLobbyScene = scene.name == LobbySceneName;
+                : scene.name == ResolveSceneName(NetworkSceneId.Lobby) || scene.name == ResolveSceneName(NetworkSceneId.Matchmaking);
+            bool isLobbyScene = scene.name == ResolveSceneName(NetworkSceneId.Lobby);
 
             // Ensure lobby voice/chat routing has a deterministic baseline state, even when
             // scene-local lobby manager wiring is missing or delayed.
@@ -428,13 +435,7 @@ namespace SatelliteGameJam.Networking.State
                 }
             }
 
-            switch (sceneId)
-            {
-                case NetworkSceneId.Lobby: return LobbySceneName;
-                case NetworkSceneId.GroundControl: return GroundControlSceneName;
-                case NetworkSceneId.SpaceStation: return SpaceStationSceneName;
-                default: return string.Empty;
-            }
+            return NetworkingConfiguration.Instance?.GetSceneName(sceneId) ?? string.Empty;
         }
 
         private NetworkSceneId ResolveGameplaySceneForRole(PlayerRole role)
@@ -447,30 +448,6 @@ namespace SatelliteGameJam.Networking.State
             return role == PlayerRole.SpaceStation
                 ? NetworkSceneId.SpaceStation
                 : NetworkSceneId.GroundControl;
-        }
-
-        private string GetFallbackSceneName(NetworkSceneId sceneId)
-        {
-            if (config != null)
-            {
-                switch (sceneId)
-                {
-                    case NetworkSceneId.Lobby:
-                        return config.lobbySceneName;
-                    case NetworkSceneId.GroundControl:
-                        return config.groundControlSceneName;
-                    case NetworkSceneId.SpaceStation:
-                        return config.spaceStationSceneName;
-                }
-            }
-
-            switch (sceneId)
-            {
-                case NetworkSceneId.Lobby: return lobbySceneName;
-                case NetworkSceneId.GroundControl: return groundControlSceneName;
-                case NetworkSceneId.SpaceStation: return spaceStationSceneName;
-                default: return string.Empty;
-            }
         }
 
         private void SendPlayerSceneAssignment(SteamId targetPlayer, NetworkSceneId targetScene)
@@ -564,11 +541,6 @@ namespace SatelliteGameJam.Networking.State
 
         private bool IsGameInProgress()
         {
-            if (GameStateManager.Instance != null && GameStateManager.Instance.IsInGame)
-            {
-                return true;
-            }
-
             if (SteamManager.Instance == null || PlayerStateManager.Instance == null)
             {
                 return false;

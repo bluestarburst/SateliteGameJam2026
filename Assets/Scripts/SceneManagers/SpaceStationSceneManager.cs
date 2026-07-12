@@ -1,7 +1,5 @@
 using SatelliteGameJam.Networking;
 using SatelliteGameJam.Networking.State;
-using SatelliteGameJam.Networking.Messages;
-using SatelliteGameJam.Networking.Core;
 using UnityEngine;
 
 namespace SatelliteGameJam.SceneManagers
@@ -14,35 +12,6 @@ namespace SatelliteGameJam.SceneManagers
     /// </summary>
     public class SpaceStationSceneManager : MonoBehaviour
     {
-        [Header("Debug")]
-        [SerializeField] private bool logDebug = false;
-
-        private NetworkingConfiguration config;
-
-        private void Start()
-        {
-            config = NetworkingConfiguration.Instance;
-
-            // Set local player role and scene
-            if (PlayerStateManager.Instance != null)
-            {
-                PlayerStateManager.Instance.SetLocalPlayerRole(PlayerRole.SpaceStation);
-                PlayerStateManager.Instance.SetLocalPlayerScene(NetworkSceneId.SpaceStation);
-
-                if (logDebug || (config != null && config.verboseLogging))
-                {
-                    Debug.Log("[SpaceStation] Set local player to Space Station scene/role");
-                }
-            }
-        }
-
-        private void OnDestroy()
-        {
-            // SceneSyncManager now owns remote spawn lifecycle.
-        }
-
-        // SceneSyncManager is the single authority for remote spawn/despawn.
-
         /// <summary>
         /// Example: Repair a component by index. Authority required (enforced by manager).
         /// </summary>

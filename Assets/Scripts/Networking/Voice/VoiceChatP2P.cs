@@ -23,6 +23,7 @@ namespace SatelliteGameJam.Networking.Voice
     public class VoiceChatP2P : MonoBehaviour
     {
         [Header("Voice Settings")]
+        [HideInInspector]
         [SerializeField] private NetworkingConfiguration config;
         [SerializeField] private Key crossRolePTTKey = Key.B; // Space -> Ground PTT
         [SerializeField] private bool alwaysRecord = false; // For testing override

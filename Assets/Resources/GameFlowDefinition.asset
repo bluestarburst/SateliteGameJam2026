@@ -17,54 +17,25 @@ MonoBehaviour:
     sceneName: Matchmaking
     modeType: 1
     allowedRoles:
-    onWillEnter:
-      m_PersistentCalls:
-        m_Calls: []
-    onDidEnter:
-      m_PersistentCalls:
-        m_Calls: []
   - sceneId: 1
     sceneName: Lobby
     modeType: 2
     allowedRoles:
-    onWillEnter:
-      m_PersistentCalls:
-        m_Calls: []
-    onDidEnter:
-      m_PersistentCalls:
-        m_Calls: []
   - sceneId: 2
     sceneName: BaseStation
     modeType: 3
     allowedRoles:
-    onWillEnter:
-      m_PersistentCalls:
-        m_Calls: []
-    onDidEnter:
-      m_PersistentCalls:
-        m_Calls: []
+    - 2
   - sceneId: 3
     sceneName: Satellite
     modeType: 3
     allowedRoles:
-    onWillEnter:
-      m_PersistentCalls:
-        m_Calls: []
-    onDidEnter:
-      m_PersistentCalls:
-        m_Calls: []
-  roleSceneRules:
-  - role: 2
-    targetScene: 2
-  - role: 3
-    targetScene: 3
+    - 3
   matchmakingScene: 4
   lobbyScene: 1
-  devStartup:
-    enabled: 0
-    mode: 0
-    forcedRole: 0
-    autoStartWhenMinimumPeers: 0
-    minimumPeers: 2
-    gameplayOverrideScene: 0
-    autoJoinLobbyId: 0
+  devSession:
+    enabled: 1
+    createJoinableLobby: 1
+    localRoleOverride: 0
+    joiningPlayerRole: 0
+    joiningPlayerSceneOverride: 0

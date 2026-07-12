@@ -12,36 +12,19 @@ namespace SatelliteGameJam.Networking.Core
     {
         [Header("Shared Assets")]
         [SerializeField] private NetworkingConfiguration networkingConfiguration;
-        [SerializeField] private GameFlowDefinition gameFlowDefinition;
         [SerializeField] private RoleVisualProfile roleVisualProfile;
 
-        [Header("Player Prefabs")]
-        [SerializeField] private GameObject remotePlayerPrefab;
-
-        [Header("Fallback Scene Names")]
-        [SerializeField] private string matchmakingSceneName = "Matchmaking";
-        [SerializeField] private string lobbySceneName = "Lobby";
-        [SerializeField] private string groundControlSceneName = "BaseStation";
-        [SerializeField] private string spaceStationSceneName = "Satellite";
-
         public NetworkingConfiguration NetworkingConfiguration => networkingConfiguration;
-        public GameFlowDefinition GameFlowDefinition => gameFlowDefinition;
+        public GameFlowDefinition GameFlowDefinition => networkingConfiguration != null
+            ? networkingConfiguration.gameFlowDefinition
+            : null;
         public RoleVisualProfile RoleVisualProfile => roleVisualProfile;
-        public GameObject RemotePlayerPrefab => remotePlayerPrefab;
-        public string MatchmakingSceneName => matchmakingSceneName;
-        public string LobbySceneName => lobbySceneName;
-        public string GroundControlSceneName => groundControlSceneName;
-        public string SpaceStationSceneName => spaceStationSceneName;
-
+        public GameObject RemotePlayerPrefab => networkingConfiguration != null
+            ? networkingConfiguration.remotePlayerPrefab
+            : null;
         private void Reset()
         {
             networkingConfiguration = Resources.Load<NetworkingConfiguration>("NetworkingConfig");
-            if (networkingConfiguration != null)
-            {
-                gameFlowDefinition = networkingConfiguration.gameFlowDefinition;
-                remotePlayerPrefab = networkingConfiguration.remotePlayerPrefab;
-            }
-
             roleVisualProfile = Resources.Load<RoleVisualProfile>("RoleVisualProfile");
         }
     }

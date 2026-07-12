@@ -42,12 +42,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
             SetObject(serializedConfig, "networkingConfiguration", networkingConfiguration);
             SetObject(serializedConfig, "roleVisualProfile", roleVisualProfile);
 
-            if (networkingConfiguration != null)
-            {
-                SetObject(serializedConfig, "gameFlowDefinition", networkingConfiguration.gameFlowDefinition);
-                SetObject(serializedConfig, "remotePlayerPrefab", networkingConfiguration.remotePlayerPrefab);
-            }
-
             serializedConfig.ApplyModifiedProperties();
             EditorUtility.SetDirty(config);
         }
@@ -56,7 +50,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
         {
             Undo.RecordObject(config.gameObject, "Apply SteamPack Config");
 
-            ApplySteamManager(config);
             ApplyNetworkConnectionManager(config);
             ApplySceneSyncManager(config);
             ApplyVoiceManagers(config);
@@ -67,18 +60,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
             PrefabUtility.RecordPrefabInstancePropertyModifications(config.gameObject);
         }
 
-        private static void ApplySteamManager(SteamPackConfig config)
-        {
-            SteamManager steamManager = config.GetComponent<SteamManager>();
-            if (steamManager == null) return;
-
-            SerializedObject so = new SerializedObject(steamManager);
-            SetObject(so, "gameFlowDefinition", config.GameFlowDefinition);
-            SetString(so, "legacyLobbySceneName", config.LobbySceneName);
-            so.ApplyModifiedProperties();
-            EditorUtility.SetDirty(steamManager);
-        }
-
         private static void ApplyNetworkConnectionManager(SteamPackConfig config)
         {
             NetworkConnectionManager manager = config.GetComponent<NetworkConnectionManager>();
@@ -87,7 +68,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
             SerializedObject so = new SerializedObject(manager);
             SetObject(so, "config", config.NetworkingConfiguration);
             SetObject(so, "roleVisualProfile", config.RoleVisualProfile);
-            SetObject(so, "playerPrefab", config.RemotePlayerPrefab);
             so.ApplyModifiedProperties();
             EditorUtility.SetDirty(manager);
         }
@@ -100,9 +80,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
             SerializedObject so = new SerializedObject(manager);
             SetObject(so, "config", config.NetworkingConfiguration);
             SetObject(so, "sceneFlowController", config.GetComponent<SceneFlowController>());
-            SetString(so, "lobbySceneName", config.LobbySceneName);
-            SetString(so, "groundControlSceneName", config.GroundControlSceneName);
-            SetString(so, "spaceStationSceneName", config.SpaceStationSceneName);
             so.ApplyModifiedProperties();
             EditorUtility.SetDirty(manager);
         }
@@ -119,12 +96,7 @@ namespace SatelliteGameJam.Networking.Core.Editor
             if (controller == null) return;
 
             SerializedObject so = new SerializedObject(controller);
-            SetObject(so, "gameFlowDefinition", config.GameFlowDefinition);
             SetObject(so, "networkingConfiguration", config.NetworkingConfiguration);
-            SetString(so, "fallbackMatchmakingSceneName", config.MatchmakingSceneName);
-            SetString(so, "fallbackLobbySceneName", config.LobbySceneName);
-            SetString(so, "fallbackGroundSceneName", config.GroundControlSceneName);
-            SetString(so, "fallbackSpaceSceneName", config.SpaceStationSceneName);
             so.ApplyModifiedProperties();
             EditorUtility.SetDirty(controller);
         }
@@ -150,15 +122,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
             if (property != null)
             {
                 property.objectReferenceValue = value;
-            }
-        }
-
-        private static void SetString(SerializedObject serializedObject, string propertyName, string value)
-        {
-            SerializedProperty property = serializedObject.FindProperty(propertyName);
-            if (property != null)
-            {
-                property.stringValue = value;
             }
         }
 

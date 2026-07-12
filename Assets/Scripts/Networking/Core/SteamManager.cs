@@ -19,24 +19,6 @@ public class SteamManager : MonoBehaviour
 {
     public static SteamManager Instance;
 
-    [Header("Steam Config")]
-    [Tooltip("Replace with your own Steam App ID before shipping.")]
-    [SerializeField] private uint gameAppId = 480; // Spacewar default for local testing
-
-    [Header("Scenes & Flow")]
-    [Tooltip("Legacy fallback lobby scene name used only when SceneFlowController is unavailable.")]
-    [SerializeField] private string legacyLobbySceneName = "Lobby";
-    [SerializeField] private bool autoCreateLobbyForTesting = false;
-    [SerializeField] private GameFlowDefinition gameFlowDefinition;
-
-    [Header("Dev Startup")]
-    [SerializeField] private bool enableDevStartupProfile = false;
-    [SerializeField] private DevStartupMode devStartupMode = DevStartupMode.Normal;
-    [SerializeField] private PlayerRole forcedLocalRole = PlayerRole.None;
-    [SerializeField] private bool autoStartWhenMinimumPeers = false;
-    [SerializeField] private int minimumPeersToAutoStart = 2;
-    [SerializeField] private ulong autoJoinLobbyId;
-    
     private int playerElo = 0;
 
     public string PlayerName { get; private set; } = string.Empty;
@@ -82,6 +64,8 @@ public class SteamManager : MonoBehaviour
     private bool applicationHasQuit;
     private bool theRealOne;
 
+    public bool IsDevelopmentSessionActive { get; private set; }
+
     public void Awake()
     {
         if (Instance == null)
@@ -103,7 +87,7 @@ public class SteamManager : MonoBehaviour
     {
         try
         {
-            SteamClient.Init(gameAppId, true);
+            SteamClient.Init(GetSteamAppId(), true);
             if (!SteamClient.IsValid)
             {
                 Debug.Log("Steam client not valid");
@@ -129,7 +113,7 @@ public class SteamManager : MonoBehaviour
         Debug.Log("Attempting to reconnect to Steam");
         try
         {
-            SteamClient.Init(gameAppId, true);
+            SteamClient.Init(GetSteamAppId(), true);
             if (!SteamClient.IsValid)
             {
                 Debug.Log("Steam client not valid");
@@ -157,6 +141,11 @@ public class SteamManager : MonoBehaviour
         return SteamClient.IsValid;
     }
 
+    private uint GetSteamAppId()
+    {
+        return NetworkingConfiguration.Instance?.steamAppId ?? 480;
+    }
+
     private void Start()
     {
         SteamMatchmaking.OnLobbyGameCreated += OnLobbyGameCreatedCallback;
@@ -172,12 +161,7 @@ public class SteamManager : MonoBehaviour
 
         UpdateRichPresenceStatus(SceneManager.GetActiveScene().name);
 
-        if (autoCreateLobbyForTesting)
-        {
-            CreateLobby(0);
-        }
-
-        RunDevStartupProfile();
+        RunDevelopmentSession();
     }
 
     private void Update()
@@ -366,14 +350,6 @@ public class SteamManager : MonoBehaviour
 
         AddRemoteMember(friend);
         SceneSyncManager.Instance?.AssignJoiningPlayer(friend.Id);
-
-        if (autoStartWhenMinimumPeers &&
-            currentLobby.Id.Value != 0 &&
-            IsLocalPlayerLobbyHost &&
-            currentLobby.MemberCount >= minimumPeersToAutoStart)
-        {
-            SceneSyncManager.Instance?.RequestStartGame();
-        }
     }
 
     private void OnDlcInstalledCallback(AppId appId)
@@ -625,9 +601,7 @@ public class SteamManager : MonoBehaviour
             return;
         }
 
-        string fallbackLobby = !string.IsNullOrWhiteSpace(legacyLobbySceneName)
-            ? legacyLobbySceneName
-            : NetworkingConfiguration.Instance?.lobbySceneName;
+        string fallbackLobby = NetworkingConfiguration.Instance?.GetSceneName(NetworkSceneId.Lobby);
 
         if (!string.IsNullOrWhiteSpace(fallbackLobby))
         {
@@ -656,59 +630,88 @@ public class SteamManager : MonoBehaviour
         return activeScene == "Matchmaking" || activeScene == "Lobby";
     }
 
-    private async void RunDevStartupProfile()
+    public bool TryGetDevelopmentJoinAssignment(out PlayerRole role, out NetworkSceneId scene)
+    {
+        role = PlayerRole.None;
+        scene = NetworkSceneId.None;
+
+        if (!IsDevelopmentSessionActive)
+        {
+            return false;
+        }
+
+        GameFlowDefinition definition = SceneFlowController.Instance?.Definition ??
+            NetworkingConfiguration.Instance?.gameFlowDefinition;
+        if (definition == null)
+        {
+            return false;
+        }
+
+        PlayerRole localRole = PlayerStateManager.Instance?.GetPlayerState(PlayerSteamId).Role ?? PlayerRole.None;
+        role = definition.ResolveDevelopmentJoinRole(localRole);
+        scene = definition.ResolveDevelopmentJoinScene(role);
+        return role != PlayerRole.None && scene != NetworkSceneId.None;
+    }
+
+    private async void RunDevelopmentSession()
     {
 #if !(UNITY_EDITOR || DEVELOPMENT_BUILD)
         return;
 #else
-        if (!enableDevStartupProfile)
+        GameFlowDefinition definition = SceneFlowController.Instance?.Definition ??
+            NetworkingConfiguration.Instance?.gameFlowDefinition;
+        if (definition == null || !definition.DevSession.enabled)
         {
-            if (gameFlowDefinition == null)
-            {
-                return;
-            }
-
-            if (!gameFlowDefinition.DevStartup.enabled)
-            {
-                return;
-            }
+            return;
         }
 
-        DevStartupProfile profile = gameFlowDefinition != null ? gameFlowDefinition.DevStartup : null;
-        DevStartupMode mode = enableDevStartupProfile ? devStartupMode : (profile != null ? profile.mode : DevStartupMode.Normal);
-        PlayerRole roleOverride = enableDevStartupProfile ? forcedLocalRole : (profile != null ? profile.forcedRole : PlayerRole.None);
-        ulong lobbyId = enableDevStartupProfile ? autoJoinLobbyId : (profile != null ? profile.autoJoinLobbyId : 0UL);
-
-        if (roleOverride != PlayerRole.None && PlayerStateManager.Instance != null)
+        if (SceneFlowController.Instance == null ||
+            !SceneFlowController.Instance.TryGetSceneId(SceneManager.GetActiveScene().name, out NetworkSceneId activeScene))
         {
-            PlayerStateManager.Instance.SetLocalPlayerRole(roleOverride);
+            Debug.LogWarning("[SteamManager] Development session requires the active scene to be mapped in GameFlowDefinition.");
+            return;
         }
 
-        switch (mode)
+        if (PlayerSteamId.Value == 0)
         {
-            case DevStartupMode.AutoCreateLobby:
-                await CreateLobby(0);
-                RouteToLobbyScene();
-                break;
-            case DevStartupMode.AutoJoinByCode:
-                Debug.LogWarning($"[SteamManager] AutoJoinByCode is not yet implemented for lobby id {lobbyId}.");
-                break;
-            case DevStartupMode.SkipToLobby:
-                RouteToLobbyScene();
-                break;
-            case DevStartupMode.SkipToGameplay:
+            Debug.Log("[SteamManager] Development session is running locally because Steam is unavailable.");
+            return;
+        }
+
+        PlayerRole localRole = definition.ResolveDevelopmentLocalRole(activeScene);
+        if (PlayerStateManager.Instance != null)
+        {
+            if (localRole != PlayerRole.None)
             {
-                if (SceneFlowController.Instance != null)
-                {
-                    NetworkSceneId target = SceneFlowController.Instance.ResolveGameplaySceneForRole(
-                        roleOverride == PlayerRole.None ? PlayerRole.GroundControl : roleOverride);
-                    SceneFlowController.Instance.LoadSceneForLocal(target);
-                }
-                break;
+                PlayerStateManager.Instance.SetLocalPlayerRole(localRole);
             }
-            case DevStartupMode.Normal:
-            default:
-                break;
+
+            PlayerStateManager.Instance.SetLocalPlayerScene(activeScene);
+        }
+
+        if (!definition.DevSession.createJoinableLobby || HasActiveLobby)
+        {
+            IsDevelopmentSessionActive = true;
+            return;
+        }
+
+        if (!await CreateLobby(0))
+        {
+            Debug.LogWarning("[SteamManager] Development session could not create its joinable lobby.");
+            return;
+        }
+
+        IsDevelopmentSessionActive = true;
+
+        // Re-broadcast after the lobby exists so late joiners have an authoritative baseline.
+        if (PlayerStateManager.Instance != null)
+        {
+            if (localRole != PlayerRole.None)
+            {
+                PlayerStateManager.Instance.SetLocalPlayerRole(localRole);
+            }
+
+            PlayerStateManager.Instance.SetLocalPlayerScene(activeScene);
         }
 #endif
     }

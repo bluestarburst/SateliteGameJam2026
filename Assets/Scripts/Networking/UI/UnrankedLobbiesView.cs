@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
@@ -8,13 +7,11 @@ using SatelliteGameJam.Networking.Core;
 // Displays active unranked lobbies in a ScrollView and joins on click
 public class UnrankedLobbiesView : MonoBehaviour
 {
+    private const float RefreshIntervalSeconds = 5f;
+
     [Header("UI References")]
     [SerializeField] private RectTransform contentRoot;   // Assign ScrollView content transform
     [SerializeField] private Button lobbyItemButtonPrefab; // Assign a Button prefab with a Text child
-    [SerializeField] private bool autoRefreshOnEnable = true;
-    [SerializeField] private float refreshInterval = 30f;
-    [SerializeField] private string LobbyScene = "LobbyScene";
-
     [Header("Optional")]
     [SerializeField] private string emptyStateMessage = "No lobbies found";
 
@@ -27,7 +24,7 @@ public class UnrankedLobbiesView : MonoBehaviour
         }
 
         // create repeating refresh every 30 seconds
-        InvokeRepeating(nameof(RefreshList), 0f, 5f);
+        InvokeRepeating(nameof(RefreshList), 0f, RefreshIntervalSeconds);
     }
 
     public async void RefreshList()
@@ -118,15 +115,12 @@ public class UnrankedLobbiesView : MonoBehaviour
 
         Debug.Log($"Joined lobby {lobby.Id} hosted by {lobby.Owner.Name}");
 
-        // go to lobby scene
-        if (SceneFlowController.Instance != null)
+        if (SceneFlowController.Instance != null && SceneFlowController.Instance.LoadLobbyScene())
         {
-            SceneFlowController.Instance.LoadLobbyScene();
+            return;
         }
-        else
-        {
-            UnityEngine.SceneManagement.SceneManager.LoadScene(LobbyScene);
-        }
+
+        Debug.LogWarning("[UnrankedLobbiesView] Joined the lobby, but SceneFlowController is unavailable for scene routing.");
     }
 
     private void ClearContent()

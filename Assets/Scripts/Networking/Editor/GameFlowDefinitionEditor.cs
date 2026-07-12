@@ -12,6 +12,8 @@ namespace SatelliteGameJam.Networking.Core.Editor
         {
             DrawDefaultInspector();
 
+            DrawFlowPreview((GameFlowDefinition)target);
+
             EditorGUILayout.Space(10);
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
@@ -26,7 +28,45 @@ namespace SatelliteGameJam.Networking.Core.Editor
                 {
                     AddKnownBuildSettingsScenes(serializedObject);
                 }
+
+                if (GUILayout.Button("Validate Flow"))
+                {
+                    ((GameFlowDefinition)target).Validate();
+                }
             }
+        }
+
+        private static void DrawFlowPreview(GameFlowDefinition definition)
+        {
+            EditorGUILayout.Space(10);
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField("Resolved Flow", EditorStyles.boldLabel);
+
+                foreach (FlowSceneEntry scene in definition.Scenes)
+                {
+                    PlayerRole role = definition.ResolveDefaultRoleForScene(scene.sceneId);
+                    string roleLabel = role == PlayerRole.None ? "Role selected at runtime" : role.ToString();
+                    EditorGUILayout.LabelField(scene.sceneId.ToString(), $"{scene.sceneName}  -  {roleLabel}");
+                }
+
+                if (definition.DevSession.enabled)
+                {
+                    EditorGUILayout.Space(3);
+                    EditorGUILayout.LabelField("Development Join Assignment", EditorStyles.boldLabel);
+                    DrawDevelopmentJoinPreview(definition, PlayerRole.GroundControl);
+                    DrawDevelopmentJoinPreview(definition, PlayerRole.SpaceStation);
+                }
+            }
+        }
+
+        private static void DrawDevelopmentJoinPreview(GameFlowDefinition definition, PlayerRole localRole)
+        {
+            PlayerRole joiningRole = definition.ResolveDevelopmentJoinRole(localRole);
+            NetworkSceneId joiningScene = definition.ResolveDevelopmentJoinScene(joiningRole);
+            EditorGUILayout.LabelField(
+                $"Host {localRole}",
+                $"joiner: {joiningRole} -> {joiningScene}");
         }
 
         private static void ApplyDefaultJamFlow(SerializedObject serializedObject)
@@ -36,10 +76,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
             EnsureScene(scenes, NetworkSceneId.Lobby, "Lobby", GameModeType.Lobby);
             EnsureScene(scenes, NetworkSceneId.GroundControl, "BaseStation", GameModeType.Gameplay, PlayerRole.GroundControl);
             EnsureScene(scenes, NetworkSceneId.SpaceStation, "Satellite", GameModeType.Gameplay, PlayerRole.SpaceStation);
-
-            SerializedProperty rules = serializedObject.FindProperty("roleSceneRules");
-            EnsureRoleRule(rules, PlayerRole.GroundControl, NetworkSceneId.GroundControl);
-            EnsureRoleRule(rules, PlayerRole.SpaceStation, NetworkSceneId.SpaceStation);
 
             serializedObject.FindProperty("matchmakingScene").enumValueIndex = (int)NetworkSceneId.Matchmaking;
             serializedObject.FindProperty("lobbyScene").enumValueIndex = (int)NetworkSceneId.Lobby;
@@ -64,7 +100,7 @@ namespace SatelliteGameJam.Networking.Core.Editor
                     continue;
                 }
 
-                EnsureScene(scenes, sceneId, sceneName, GuessMode(sceneName));
+                EnsureScene(scenes, sceneId, sceneName, GuessMode(sceneName), GetDefaultRoles(sceneId));
             }
 
             serializedObject.ApplyModifiedProperties();
@@ -110,33 +146,6 @@ namespace SatelliteGameJam.Networking.Core.Editor
             return null;
         }
 
-        private static void EnsureRoleRule(SerializedProperty rules, PlayerRole role, NetworkSceneId targetScene)
-        {
-            SerializedProperty rule = FindRoleRule(rules, role);
-            if (rule == null)
-            {
-                rules.arraySize++;
-                rule = rules.GetArrayElementAtIndex(rules.arraySize - 1);
-            }
-
-            rule.FindPropertyRelative("role").enumValueIndex = (int)role;
-            rule.FindPropertyRelative("targetScene").enumValueIndex = (int)targetScene;
-        }
-
-        private static SerializedProperty FindRoleRule(SerializedProperty rules, PlayerRole role)
-        {
-            for (int i = 0; i < rules.arraySize; i++)
-            {
-                SerializedProperty rule = rules.GetArrayElementAtIndex(i);
-                if (rule.FindPropertyRelative("role").enumValueIndex == (int)role)
-                {
-                    return rule;
-                }
-            }
-
-            return null;
-        }
-
         private static NetworkSceneId GuessSceneId(string sceneName)
         {
             if (sceneName == "Matchmaking") return NetworkSceneId.Matchmaking;
@@ -151,6 +160,19 @@ namespace SatelliteGameJam.Networking.Core.Editor
             if (sceneName == "Matchmaking") return GameModeType.Matchmaking;
             if (sceneName == "Lobby") return GameModeType.Lobby;
             return GameModeType.Gameplay;
+        }
+
+        private static PlayerRole[] GetDefaultRoles(NetworkSceneId sceneId)
+        {
+            switch (sceneId)
+            {
+                case NetworkSceneId.GroundControl:
+                    return new[] { PlayerRole.GroundControl };
+                case NetworkSceneId.SpaceStation:
+                    return new[] { PlayerRole.SpaceStation };
+                default:
+                    return System.Array.Empty<PlayerRole>();
+            }
         }
     }
 }

@@ -35,28 +35,27 @@ namespace SatelliteGameJam.Networking.Core
 
     // Part 6: Extensible handler system
     private NetworkHandlerRegistry handlerRegistry = new NetworkHandlerRegistry();
-    private NetworkMessageRegistry messageRegistry = NetworkMessageRegistry.Instance;
     
     // Part 6: Transport abstraction
     private INetworkTransport transport;
 
     [Header("Configuration")]
+    [HideInInspector]
     [SerializeField] private NetworkingConfiguration config;
+    [HideInInspector]
     [SerializeField] private RoleVisualProfile roleVisualProfile;
-
-    // Fallback settings if no config is assigned
-    [Header("Fallback Settings (used if no config assigned)")]
-    [SerializeField] private int[] channelsToPoll = new[] { 0, 1, 3, 4 }; // Exclude voice channel 2
-    [SerializeField] private bool autoSpawnPlayer = true;
-    [SerializeField] private GameObject playerPrefab;
 
     // Track spawned remote player instances to prevent duplicates and allow cleanup
     private readonly Dictionary<SteamId, GameObject> spawnedRemotePlayers = new();
 
     // Properties for accessing configuration
-    private int[] ChannelsToPoll => config != null ? config.channelsToPoll : channelsToPoll;
-    private bool AutoSpawnPlayer => config != null ? config.autoSpawnPlayers : autoSpawnPlayer;
-    private GameObject PlayerPrefab => config != null ? config.remotePlayerPrefab : playerPrefab;
+    private static readonly int[] ChannelsToPoll = { 0, 1, 3, 4 }; // Voice uses its own receiver.
+    private bool AutoSpawnPlayer => config != null
+        ? config.autoSpawnPlayers
+        : NetworkingConfiguration.Instance?.autoSpawnPlayers ?? false;
+    private GameObject PlayerPrefab => config != null
+        ? config.remotePlayerPrefab
+        : NetworkingConfiguration.Instance?.remotePlayerPrefab;
 
 
     private void Awake()
@@ -72,6 +71,11 @@ namespace SatelliteGameJam.Networking.Core
         DontDestroyOnLoad(gameObject);
         messageHandlers = new Dictionary<NetworkMessageType, Action<SteamId, byte[]>>();
 
+        if (config == null)
+        {
+            config = NetworkingConfiguration.Instance;
+        }
+
         // Part 6: Initialize transport layer
         InitializeTransport();
 
@@ -80,15 +84,10 @@ namespace SatelliteGameJam.Networking.Core
         {
             config.ValidateConfiguration();
             
-            // Part 6: Load custom message types if configured
-            if (config.useExtensibleMessageSystem)
-            {
-                config.LoadCustomMessages();
-            }
         }
         else
         {
-            Debug.LogWarning("[NetworkConnectionManager] No NetworkingConfiguration assigned. Using fallback settings.");
+            Debug.LogError("[NetworkConnectionManager] NetworkingConfig is missing; network spawning and transport settings are unavailable.");
         }
     }
 
@@ -109,12 +108,24 @@ namespace SatelliteGameJam.Networking.Core
 
     private void Update()
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
         // Poll channels from configuration
         foreach (int channel in ChannelsToPoll)
         {
             if (channel == 2) continue; // Skip voice channel
             PollChannel(channel);
         }
+    }
+
+    private bool HasNetworkRuntime()
+    {
+        return SteamManager.Instance != null
+            && SteamManager.Instance.PlayerSteamId.Value != 0
+            && SteamManager.Instance.ConnectedToSteam();
     }
 
     /// <summary>
@@ -184,8 +195,13 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void SendToAll(byte[] data, int channel, P2PSend sendType)
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
         // Send to all peers via SteamManager.Instance.currentLobby.Members
-        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
+        if (SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
         {
             Debug.LogWarning($"Cannot send data - not connected to a lobby. channel={channel} bytes={(data != null ? data.Length : 0)}");
             return;
@@ -204,8 +220,13 @@ namespace SatelliteGameJam.Networking.Core
     /// </summary>
     public void SendTo(SteamId targetId, byte[] data, int channel, P2PSend sendType)
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
         // Send to specific peer
-        if (SteamManager.Instance == null || SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
+        if (SteamManager.Instance.currentLobby.Id.Value == 0 || SteamManager.Instance.currentLobby.MemberCount == 0)
         {
             Debug.LogWarning($"Cannot send data - not connected to a lobby. target={targetId} channel={channel} bytes={(data != null ? data.Length : 0)}");
             return;
@@ -405,6 +426,22 @@ namespace SatelliteGameJam.Networking.Core
     /// </example>
     public void SendMessage<T>(SteamId target, T message) where T : INetworkMessage
     {
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
+        if (SteamManager.Instance.currentLobby.Id.Value == 0 ||
+            !SteamManager.Instance.currentLobby.Members.Any(member => member.Id == target))
+        {
+            if (config != null && config.verboseLogging)
+            {
+                Debug.LogWarning($"[NetworkConnectionManager] Cannot send extensible message to {target}; target is not in the active lobby.");
+            }
+
+            return;
+        }
+
         byte[] data = message.Serialize();
         P2PSend sendType = message.RequireReliable ? P2PSend.Reliable : P2PSend.UnreliableNoDelay;
         
@@ -436,7 +473,12 @@ namespace SatelliteGameJam.Networking.Core
     /// </example>
     public void SendMessageToAll<T>(T message) where T : INetworkMessage
     {
-        if (SteamManager.Instance?.currentLobby.MemberCount == 0)
+        if (!HasNetworkRuntime())
+        {
+            return;
+        }
+
+        if (SteamManager.Instance.currentLobby.MemberCount == 0)
         {
             Debug.LogWarning("[NetworkConnectionManager] Cannot broadcast message - not in lobby");
             return;

@@ -13,14 +13,13 @@ namespace SatelliteGameJam.Networking.Core
         public static SceneFlowController Instance { get; private set; }
 
         [Header("Flow Definition")]
-        [SerializeField] private GameFlowDefinition gameFlowDefinition;
+        [HideInInspector]
         [SerializeField] private NetworkingConfiguration networkingConfiguration;
 
-        [Header("Fallbacks")]
-        [SerializeField] private string fallbackMatchmakingSceneName = "Matchmaking";
-        [SerializeField] private string fallbackLobbySceneName = "Lobby";
-        [SerializeField] private string fallbackGroundSceneName = "GroundControl";
-        [SerializeField] private string fallbackSpaceSceneName = "SpaceStation";
+        private const string FallbackMatchmakingSceneName = "Matchmaking";
+        private const string FallbackLobbySceneName = "Lobby";
+        private const string FallbackGroundSceneName = "BaseStation";
+        private const string FallbackSpaceSceneName = "Satellite";
 
         [Header("Debug")]
         [SerializeField] private bool verboseLogging = true;
@@ -38,6 +37,11 @@ namespace SatelliteGameJam.Networking.Core
             Instance = this;
             DontDestroyOnLoad(gameObject);
             SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        private void Start()
+        {
+            SynchronizeLocalPresence(SceneManager.GetActiveScene().name);
         }
 
         private void OnDestroy()
@@ -85,16 +89,37 @@ namespace SatelliteGameJam.Networking.Core
             switch (sceneId)
             {
                 case NetworkSceneId.Matchmaking:
-                    return fallbackMatchmakingSceneName;
+                    return FallbackMatchmakingSceneName;
                 case NetworkSceneId.Lobby:
-                    return fallbackLobbySceneName;
+                    return FallbackLobbySceneName;
                 case NetworkSceneId.GroundControl:
-                    return fallbackGroundSceneName;
+                    return FallbackGroundSceneName;
                 case NetworkSceneId.SpaceStation:
-                    return fallbackSpaceSceneName;
+                    return FallbackSpaceSceneName;
                 default:
                     return string.Empty;
             }
+        }
+
+        public bool TryGetSceneId(string sceneName, out NetworkSceneId sceneId)
+        {
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            if (flowDefinition != null && flowDefinition.TryGetSceneEntryByName(sceneName, out FlowSceneEntry entry))
+            {
+                sceneId = entry.sceneId;
+                return true;
+            }
+
+            sceneId = NetworkSceneId.None;
+            return false;
+        }
+
+        public PlayerRole ResolveDefaultRoleForScene(NetworkSceneId sceneId)
+        {
+            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
+            return flowDefinition != null
+                ? flowDefinition.ResolveDefaultRoleForScene(sceneId)
+                : PlayerRole.None;
         }
 
         public bool LoadSceneForLocal(NetworkSceneId sceneId)
@@ -109,12 +134,6 @@ namespace SatelliteGameJam.Networking.Core
             if (SceneManager.GetActiveScene().name == sceneName)
             {
                 return true;
-            }
-
-            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
-            if (flowDefinition != null && flowDefinition.TryGetSceneEntry(sceneId, out FlowSceneEntry entry))
-            {
-                entry.onWillEnter?.Invoke();
             }
 
             if (verboseLogging)
@@ -141,12 +160,7 @@ namespace SatelliteGameJam.Networking.Core
                 return LoadSceneForLocal(flowDefinition.MatchmakingScene);
             }
 
-            if (string.IsNullOrWhiteSpace(fallbackMatchmakingSceneName))
-            {
-                return false;
-            }
-
-            SceneManager.LoadScene(fallbackMatchmakingSceneName);
+            SceneManager.LoadScene(FallbackMatchmakingSceneName);
             return true;
         }
 
@@ -174,7 +188,7 @@ namespace SatelliteGameJam.Networking.Core
                 return entry.modeType == GameModeType.Lobby || entry.modeType == GameModeType.Matchmaking;
             }
 
-            return string.Equals(sceneName, fallbackLobbySceneName) || string.Equals(sceneName, fallbackMatchmakingSceneName);
+            return string.Equals(sceneName, FallbackLobbySceneName) || string.Equals(sceneName, FallbackMatchmakingSceneName);
         }
 
         public bool CanHostStartGame(out string reason)
@@ -220,15 +234,30 @@ namespace SatelliteGameJam.Networking.Core
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            GameFlowDefinition flowDefinition = ResolveFlowDefinition();
-            if (flowDefinition == null)
+            SynchronizeLocalPresence(scene.name);
+
+        }
+
+        private void SynchronizeLocalPresence(string sceneName)
+        {
+            if (!TryGetSceneId(sceneName, out NetworkSceneId sceneId) ||
+                SteamManager.Instance == null ||
+                SteamManager.Instance.PlayerSteamId.Value == 0 ||
+                PlayerStateManager.Instance == null)
             {
                 return;
             }
 
-            if (flowDefinition.TryGetSceneEntryByName(scene.name, out FlowSceneEntry entry))
+            PlayerState state = PlayerStateManager.Instance.GetPlayerState(SteamManager.Instance.PlayerSteamId);
+            PlayerRole role = ResolveDefaultRoleForScene(sceneId);
+            if (role != PlayerRole.None && state.Role != role)
             {
-                entry.onDidEnter?.Invoke();
+                PlayerStateManager.Instance.SetLocalPlayerRole(role);
+            }
+
+            if (state.Scene != sceneId)
+            {
+                PlayerStateManager.Instance.SetLocalPlayerScene(sceneId);
             }
         }
 
@@ -240,17 +269,14 @@ namespace SatelliteGameJam.Networking.Core
                 return entry.modeType == GameModeType.Lobby;
             }
 
-            return string.Equals(sceneName, fallbackLobbySceneName);
+            return string.Equals(sceneName, FallbackLobbySceneName);
         }
 
         private GameFlowDefinition ResolveFlowDefinition()
         {
-            if (gameFlowDefinition != null)
-            {
-                return gameFlowDefinition;
-            }
-
-            return networkingConfiguration != null ? networkingConfiguration.gameFlowDefinition : null;
+            return networkingConfiguration != null
+                ? networkingConfiguration.gameFlowDefinition
+                : NetworkingConfiguration.Instance?.gameFlowDefinition;
         }
     }
 }

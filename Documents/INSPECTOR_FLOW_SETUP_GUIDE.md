@@ -3,7 +3,7 @@
 This guide explains how to configure the new inspector-driven multiplayer flow for:
 
 - Full game loop (`Matchmaking -> Lobby -> Gameplay split -> Lobby`)
-- Focused SteamPack feature tests using `DontDestroyOnLoad`
+- Direct-scene development sessions using `DontDestroyOnLoad`
 
 ---
 
@@ -43,29 +43,22 @@ Updated systems now consume these:
 In the `scenes` list, add at least:
 
 - `Lobby` -> `sceneId: Lobby`, `sceneName: Lobby`, `modeType: Lobby`
-- `GroundControl` -> `sceneId: GroundControl`, `sceneName: BaseStation`, `modeType: Gameplay`
-- `SpaceStation` -> `sceneId: SpaceStation`, `sceneName: Satellite`, `modeType: Gameplay`
-- Optional: `Matchmaking` using `sceneId: None`, `sceneName: Matchmaking`, `modeType: Matchmaking`
-
-In `roleSceneRules`, add:
-
-- `GroundControl -> GroundControl`
-- `SpaceStation -> SpaceStation`
+- `GroundControl` -> `sceneId: GroundControl`, `sceneName: BaseStation`, `modeType: Gameplay`, `allowedRoles: GroundControl`
+- `SpaceStation` -> `sceneId: SpaceStation`, `sceneName: Satellite`, `modeType: Gameplay`, `allowedRoles: SpaceStation`
+- `Matchmaking` -> `sceneId: Matchmaking`, `sceneName: Matchmaking`, `modeType: Matchmaking`
 
 Set well-known fields:
 
 - `lobbyScene = Lobby`
-- `matchmakingScene = None` (or your preferred scene mapping strategy)
+- `matchmakingScene = Matchmaking`
 
-Optional hooks:
-
-- Add UnityEvents in `onWillEnter` and `onDidEnter` per scene for custom setup/cleanup.
+The allowed-role list is also the role-to-scene routing rule. Do not create a second mapping.
 
 ## Step C: Configure `SteamPack` Prefab
 
 On the `SteamPack` prefab:
 
-1. Ensure these components exist once:
+1. Ensure these components exist:
    - `SteamManager`
    - `SceneFlowController`
    - `SceneSyncManager`
@@ -73,13 +66,8 @@ On the `SteamPack` prefab:
    - `VoiceSessionManager`
    - `VoiceChatP2P`
    - `SceneAudioAnchorManager`
-2. Wire references:
-   - `SceneFlowController.networkingConfiguration` -> `NetworkingConfig.asset`
-   - `SceneFlowController.gameFlowDefinition` -> `GameFlowDefinition.asset`
-   - `SceneSyncManager.config` -> `NetworkingConfig.asset`
-   - `NetworkConnectionManager.config` -> `NetworkingConfig.asset`
-   - `NetworkConnectionManager.roleVisualProfile` -> `RoleVisualProfile.asset`
-   - `VoiceSessionManager.config` -> `NetworkingConfig.asset`
+2. Select `SteamPackConfig`, assign `NetworkingConfig.asset` and `RoleVisualProfile.asset`, then use `Apply To Attached Managers`.
+   `NetworkingConfig.asset` owns the GameFlowDefinition and remote-player prefab references.
 
 ## Step D: Configure Role Visuals
 
@@ -92,7 +80,7 @@ Remote players now use `PlayerAvatarComposition` and spawn visuals under `Visual
 
 ## Step E: Scene Wiring
 
-1. Put one `SteamPack` in your bootstrap entry scene (recommended: `Matchmaking`).
+1. Put one `SteamPack` in every configured flow scene: `Matchmaking`, `Lobby`, `BaseStation`, and `Satellite`.
 2. Keep scene-specific managers only for scene-specific logic:
    - `GroundControlSceneManager`
    - `SpaceStationSceneManager`
@@ -100,8 +88,8 @@ Remote players now use `PlayerAvatarComposition` and spawn visuals under `Visual
 
 Important:
 
-- Core managers use `DontDestroyOnLoad`; duplicate manager instances in loaded scenes self-destroy.
-- Preferred workflow is one bootstrap source of truth to avoid confusion.
+- Core managers use `DontDestroyOnLoad`; scene copies self-destroy after the first instance persists.
+- This lets a developer press Play directly from any configured flow scene without special bootstrap setup.
 
 ## Step F: Audio Anchor Rules
 
@@ -127,52 +115,32 @@ If no rule matches, system falls back to avatar-follow behavior.
 
 ---
 
-## 3) SteamPack Feature Unit Tests with `DontDestroyOnLoad`
+## 3) Direct Scene Development Sessions
 
-Use this for fast iteration without running full matchmaking each time.
+Use this for fast iteration without manually navigating through matchmaking.
 
 ## Test Scene Pattern
 
-Create a small `NetTest_*` scene with:
+In `GameFlowDefinition > Development Session`:
 
-- One `SteamPack` prefab instance
-- Minimal local player/controller test object(s)
-- Optional test anchors for audio (`CommAnchor`, `ConsoleAnchor`, etc.)
+- Enable the session.
+- Keep `createJoinableLobby` enabled to host from the scene currently open in the editor.
+- Leave local and joining role/scene overrides as `None` to derive them from the scene mapping.
+- Override only when a focused test needs a non-default join placement.
 
-Do not add additional manager duplicates outside SteamPack unless intentional.
-
-## Dev Startup Configuration
-
-On `SteamManager`:
-
-- `enableDevStartupProfile = true`
-- `devStartupMode` one of:
-  - `Normal`
-  - `AutoCreateLobby`
-  - `SkipToLobby`
-  - `SkipToGameplay`
-  - `AutoJoinByCode` (currently logs warning; not implemented yet)
-- Optional:
-  - `forcedLocalRole`
-  - `autoStartWhenMinimumPeers`
-  - `minimumPeersToAutoStart`
-
-Notes:
-
-- Dev startup logic is gated to editor/dev builds in code.
-- `SkipToGameplay` uses `SceneFlowController.ResolveGameplaySceneForRole`.
+The development session is gated to editor and development builds. It remains local when Steam is unavailable.
 
 ## Recommended Focused Test Cases
 
 ### A) Scene routing test
-- Set mode `SkipToLobby` or `SkipToGameplay`
-- Validate scene load comes through `SceneFlowController`
+- Press Play from each configured flow scene.
+- Confirm the local role is derived from the flow entry.
+- Confirm the joinable lobby remains at that point in the flow.
 
 ### B) Role split test
-- Use `AutoCreateLobby`
 - Join with second client
-- Assign different roles
-- Start game and verify split scenes from `GameFlowDefinition.roleSceneRules`
+- Verify the joiner receives the configured role and scene from the lobby host.
+- Start a normal lobby round and verify role-based scene split from the same flow asset.
 
 ### C) Voice anchor test
 - Add `SceneAudioAnchorManager` rules for fixed/non-spatial/follow
@@ -191,28 +159,22 @@ Notes:
   - `gameFlowDefinition` assigned
   - `remotePlayerPrefab` assigned
   - voice settings (`voiceChatEnabled`, `proximityVoiceDistance`, `useRoleBasedVoiceGating`) set
-- `SceneFlowController`
-  - `gameFlowDefinition` assigned
-  - `networkingConfiguration` assigned
-- `NetworkConnectionManager`
-  - `roleVisualProfile` assigned
-- `SteamManager`
-  - dev startup options configured for your current workflow
+- `GameFlowDefinition`
+  - every scene is enabled in Build Settings
+  - gameplay scenes have one allowed role
+  - development join overrides are set only when needed
+- `SteamPackConfig`
+  - `NetworkingConfig.asset` and `RoleVisualProfile.asset` assigned
 - `SceneAudioAnchorManager`
   - rules created for lobby/game scenes
 
----
-
-## 5) Known Limitation Right Now
-
-- `SteamManager` `AutoJoinByCode` mode currently logs a warning and is not implemented yet.
+Run `Tools > Networking > Validate Game Flow` after changing mappings or SteamPack.
 
 ---
 
-## 6) Suggested Team Workflow
+## 5) Suggested Team Workflow
 
 - Treat `GameFlowDefinition` as source of truth for scene graph and role routing.
 - Treat `RoleVisualProfile` as source of truth for role visuals.
 - Keep SteamPack as the only persistent networking bootstrap.
-- Use dev startup mode presets per tester profile to speed up iteration.
-
+- Use the development-session overrides only for focused join-placement tests.

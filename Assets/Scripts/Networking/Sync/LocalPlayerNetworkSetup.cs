@@ -34,11 +34,22 @@ namespace SatelliteGameJam.Networking.Sync
         [SerializeField] private bool logDebug = false;
 
         private NetworkIdentity networkIdentity;
+        private NetworkPlayerTag playerTag;
         private bool isSetup = false;
+        private bool playerStateEventsSubscribed;
 
         private void Awake()
         {
             networkIdentity = GetComponent<NetworkIdentity>();
+        }
+
+        private void OnDestroy()
+        {
+            if (PlayerStateManager.Instance != null && playerStateEventsSubscribed)
+            {
+                PlayerStateManager.Instance.OnRoleChanged -= OnRoleChanged;
+                PlayerStateManager.Instance.OnPlayerSceneChanged -= OnPlayerSceneChanged;
+            }
         }
 
         private void Start()
@@ -51,7 +62,7 @@ namespace SatelliteGameJam.Networking.Sync
             if (isSetup) return;
 
             // Check if SteamManager is ready
-            if (SteamManager.Instance == null || SteamManager.Instance.PlayerSteamId.Value == 0)
+            if (SteamManager.Instance == null)
             {
                 if (retryUntilReady)
                 {
@@ -63,6 +74,20 @@ namespace SatelliteGameJam.Networking.Sync
                 {
                     Debug.LogWarning("[LocalPlayerNetworkSetup] SteamManager not ready and retry disabled");
                 }
+                return;
+            }
+
+            if (SteamManager.Instance.PlayerSteamId.Value == 0)
+            {
+                if (SteamManager.Instance.ConnectedToSteam() && retryUntilReady)
+                {
+                    Invoke(nameof(TrySetup), retryDelay);
+                }
+                else if (logDebug)
+                {
+                    Debug.Log("[LocalPlayerNetworkSetup] Steam is unavailable; leaving local networking disabled.");
+                }
+
                 return;
             }
 
@@ -79,7 +104,7 @@ namespace SatelliteGameJam.Networking.Sync
             networkIdentity.SetOwner(localSteamId);
 
             var playerState = PlayerStateManager.Instance?.GetPlayerState(localSteamId);
-            var playerTag = GetComponent<NetworkPlayerTag>();
+            playerTag = GetComponent<NetworkPlayerTag>();
             if (playerTag == null)
             {
                 playerTag = gameObject.AddComponent<NetworkPlayerTag>();
@@ -105,6 +130,7 @@ namespace SatelliteGameJam.Networking.Sync
             }
 
             isSetup = true;
+            SubscribeToPlayerState();
 
             if (logDebug)
             {
@@ -132,6 +158,48 @@ namespace SatelliteGameJam.Networking.Sync
         {
             isSetup = false;
             TrySetup();
+        }
+
+        private void SubscribeToPlayerState()
+        {
+            if (playerStateEventsSubscribed || PlayerStateManager.Instance == null)
+            {
+                return;
+            }
+
+            PlayerStateManager.Instance.OnRoleChanged += OnRoleChanged;
+            PlayerStateManager.Instance.OnPlayerSceneChanged += OnPlayerSceneChanged;
+            playerStateEventsSubscribed = true;
+        }
+
+        private void OnRoleChanged(SteamId steamId, PlayerRole role)
+        {
+            if (steamId == SteamManager.Instance?.PlayerSteamId)
+            {
+                RefreshPlayerTag();
+            }
+        }
+
+        private void OnPlayerSceneChanged(SteamId steamId, NetworkSceneId scene)
+        {
+            if (steamId == SteamManager.Instance?.PlayerSteamId)
+            {
+                RefreshPlayerTag();
+            }
+        }
+
+        private void RefreshPlayerTag()
+        {
+            if (playerTag == null || SteamManager.Instance == null)
+            {
+                return;
+            }
+
+            PlayerState state = PlayerStateManager.Instance?.GetPlayerState(SteamManager.Instance.PlayerSteamId);
+            if (state != null)
+            {
+                playerTag.ApplyState(state.Role, state.Scene);
+            }
         }
     }
 }

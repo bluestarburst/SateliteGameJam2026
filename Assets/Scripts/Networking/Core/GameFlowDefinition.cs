@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using SatelliteGameJam.Networking.Messages;
 using UnityEngine;
-using UnityEngine.Events;
 
 namespace SatelliteGameJam.Networking.Core
 {
@@ -16,15 +15,6 @@ namespace SatelliteGameJam.Networking.Core
         Sandbox = 5
     }
 
-    public enum DevStartupMode
-    {
-        Normal = 0,
-        AutoCreateLobby = 1,
-        AutoJoinByCode = 2,
-        SkipToLobby = 3,
-        SkipToGameplay = 4
-    }
-
     [Serializable]
     public class FlowSceneEntry
     {
@@ -33,30 +23,21 @@ namespace SatelliteGameJam.Networking.Core
         public GameModeType modeType = GameModeType.Gameplay;
         [Tooltip("Optional: if empty, this scene can be entered by any role.")]
         public PlayerRole[] allowedRoles = Array.Empty<PlayerRole>();
-        [Tooltip("Invoked before a local transition into this scene.")]
-        public UnityEvent onWillEnter = new UnityEvent();
-        [Tooltip("Invoked after the local transition has finished loading.")]
-        public UnityEvent onDidEnter = new UnityEvent();
     }
 
     [Serializable]
-    public class RoleSceneRule
+    public class DevSessionProfile
     {
-        public PlayerRole role = PlayerRole.None;
-        public NetworkSceneId targetScene = NetworkSceneId.None;
-    }
-
-    [Serializable]
-    public class DevStartupProfile
-    {
+        [Tooltip("Only used in the Unity Editor and development builds.")]
         public bool enabled = false;
-        public DevStartupMode mode = DevStartupMode.Normal;
-        public PlayerRole forcedRole = PlayerRole.None;
-        public bool autoStartWhenMinimumPeers;
-        [Min(1)] public int minimumPeers = 2;
-        public NetworkSceneId gameplayOverrideScene = NetworkSceneId.None;
-        [Tooltip("Optional lobby id used for AutoJoinByCode flow.")]
-        public ulong autoJoinLobbyId;
+        [Tooltip("Create a public, joinable Steam lobby while keeping the currently open scene active.")]
+        public bool createJoinableLobby = true;
+        [Tooltip("None derives the local role from the active scene's role mapping.")]
+        public PlayerRole localRoleOverride = PlayerRole.None;
+        [Tooltip("None assigns the complementary gameplay role when possible.")]
+        public PlayerRole joiningPlayerRole = PlayerRole.None;
+        [Tooltip("None derives the joining player's scene from their assigned role.")]
+        public NetworkSceneId joiningPlayerSceneOverride = NetworkSceneId.None;
     }
 
     [CreateAssetMenu(fileName = "GameFlowDefinition", menuName = "Networking/Game Flow Definition", order = 2)]
@@ -65,21 +46,17 @@ namespace SatelliteGameJam.Networking.Core
         [Header("Core Scene Mapping")]
         [SerializeField] private List<FlowSceneEntry> scenes = new List<FlowSceneEntry>();
 
-        [Header("Role To Scene Mapping")]
-        [SerializeField] private List<RoleSceneRule> roleSceneRules = new List<RoleSceneRule>();
-
         [Header("Well Known Scenes")]
         [SerializeField] private NetworkSceneId matchmakingScene = NetworkSceneId.Matchmaking;
         [SerializeField] private NetworkSceneId lobbyScene = NetworkSceneId.Lobby;
 
-        [Header("Dev Startup")]
-        [SerializeField] private DevStartupProfile devStartup = new DevStartupProfile();
+        [Header("Development Session")]
+        [SerializeField] private DevSessionProfile devSession = new DevSessionProfile();
 
         public IReadOnlyList<FlowSceneEntry> Scenes => scenes;
-        public IReadOnlyList<RoleSceneRule> RoleSceneRules => roleSceneRules;
         public NetworkSceneId MatchmakingScene => matchmakingScene;
         public NetworkSceneId LobbyScene => lobbyScene;
-        public DevStartupProfile DevStartup => devStartup;
+        public DevSessionProfile DevSession => devSession;
 
         public bool TryGetSceneEntry(NetworkSceneId sceneId, out FlowSceneEntry entry)
         {
@@ -100,8 +77,67 @@ namespace SatelliteGameJam.Networking.Core
 
         public NetworkSceneId ResolveSceneForRole(PlayerRole role, NetworkSceneId fallback)
         {
-            RoleSceneRule rule = roleSceneRules.Find(r => r.role == role);
-            return rule != null ? rule.targetScene : fallback;
+            FlowSceneEntry entry = scenes.Find(candidate =>
+                candidate.allowedRoles != null &&
+                Array.Exists(candidate.allowedRoles, allowedRole => allowedRole == role));
+            return entry != null ? entry.sceneId : fallback;
+        }
+
+        public PlayerRole ResolveDefaultRoleForScene(NetworkSceneId sceneId)
+        {
+            if (sceneId == lobbyScene || sceneId == matchmakingScene)
+            {
+                return PlayerRole.Lobby;
+            }
+
+            if (TryGetSceneEntry(sceneId, out FlowSceneEntry entry) &&
+                entry.allowedRoles != null &&
+                entry.allowedRoles.Length == 1)
+            {
+                return entry.allowedRoles[0];
+            }
+
+            return PlayerRole.None;
+        }
+
+        public PlayerRole ResolveDevelopmentLocalRole(NetworkSceneId activeScene)
+        {
+            return devSession.enabled && devSession.localRoleOverride != PlayerRole.None
+                ? devSession.localRoleOverride
+                : ResolveDefaultRoleForScene(activeScene);
+        }
+
+        public PlayerRole ResolveDevelopmentJoinRole(PlayerRole localRole)
+        {
+            if (devSession.joiningPlayerRole != PlayerRole.None)
+            {
+                return devSession.joiningPlayerRole;
+            }
+
+            switch (localRole)
+            {
+                case PlayerRole.GroundControl:
+                    return PlayerRole.SpaceStation;
+                case PlayerRole.SpaceStation:
+                    return PlayerRole.GroundControl;
+                default:
+                    return PlayerRole.Lobby;
+            }
+        }
+
+        public NetworkSceneId ResolveDevelopmentJoinScene(PlayerRole joiningRole)
+        {
+            if (devSession.joiningPlayerSceneOverride != NetworkSceneId.None)
+            {
+                return devSession.joiningPlayerSceneOverride;
+            }
+
+            if (joiningRole == PlayerRole.Lobby || joiningRole == PlayerRole.None)
+            {
+                return lobbyScene;
+            }
+
+            return ResolveSceneForRole(joiningRole, NetworkSceneId.None);
         }
 
         public bool IsSceneAllowedForRole(NetworkSceneId sceneId, PlayerRole role)
@@ -150,16 +186,29 @@ namespace SatelliteGameJam.Networking.Core
             }
 
             var mappedRoles = new HashSet<PlayerRole>();
-            foreach (RoleSceneRule rule in roleSceneRules)
+            foreach (FlowSceneEntry scene in scenes)
             {
-                if (!mappedRoles.Add(rule.role))
+                if (scene.allowedRoles == null)
                 {
-                    Debug.LogWarning($"[GameFlowDefinition] Duplicate role mapping for role {rule.role}", this);
+                    continue;
                 }
 
-                if (!sceneIds.Contains(rule.targetScene))
+                foreach (PlayerRole role in scene.allowedRoles)
                 {
-                    Debug.LogWarning($"[GameFlowDefinition] Role {rule.role} targets unmapped scene {rule.targetScene}", this);
+                    if (role != PlayerRole.None && !mappedRoles.Add(role))
+                    {
+                        Debug.LogWarning($"[GameFlowDefinition] Role {role} is assigned to more than one scene.", this);
+                    }
+                }
+            }
+
+            if (devSession.enabled)
+            {
+                PlayerRole joinRole = ResolveDevelopmentJoinRole(devSession.localRoleOverride);
+                NetworkSceneId joinScene = ResolveDevelopmentJoinScene(joinRole);
+                if (joinScene == NetworkSceneId.None || !sceneIds.Contains(joinScene))
+                {
+                    Debug.LogWarning("[GameFlowDefinition] Development join assignment resolves to an unmapped scene.", this);
                 }
             }
         }
