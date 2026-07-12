@@ -39,12 +39,12 @@ public class OutsideSpacePlayerControl : MonoBehaviour
         rb = GetComponent<Rigidbody>();
     }
 
-    void OnEnable()
+    private void OnEnable()
     {
         moveAction.action.Enable();
     }
 
-    void OnDisable()
+    private void OnDisable()
     {
         moveAction.action.Disable();
     }
