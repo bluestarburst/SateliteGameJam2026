@@ -11,12 +11,16 @@ public class FolderInteract : MonoBehaviour
     public float riseSpeed = 10f;
     private Vector3 target;
     private Quaternion target_rot;
+    private bool initialized;
     
     public void Init()
     {
         baseLocalPos = transform.localPosition;
         baseLocalRot = transform.localRotation;
         baseParent = transform.parent;
+        target = baseLocalPos;
+        target_rot = baseLocalRot;
+        initialized = true;
     }
 
     public void SetSelected(bool selected)
@@ -44,6 +48,11 @@ public class FolderInteract : MonoBehaviour
     }
 
     void Update() {
+        if (!initialized)
+        {
+            return;
+        }
+
         transform.localPosition = Vector3.Lerp(
             transform.localPosition,
             target,

@@ -19,7 +19,14 @@ public class TransmissionInteract : MonoBehaviour, IInteractable
 
     public void Interact(GroundPlayerInteractor interactor) {
         answeringTransmission = !answeringTransmission;
-        // VoiceSessionManager.Instance.SetLocalPlayerAtConsole(answeringTransmission);
+        if (GameFlowManager.Instance != null)
+        {
+            GameFlowManager.Instance.SetConsoleInteraction(answeringTransmission);
+        }
+        else
+        {
+            VoiceSessionManager.Instance?.SetLocalPlayerAtConsole(answeringTransmission);
+        }
         if (answeringTransmission) {
             interactor.restrictMovementTo(transform.position, tetherDistance);
             cable.SetActive(true);
@@ -35,14 +42,6 @@ public class TransmissionInteract : MonoBehaviour, IInteractable
     }
 
     public void OnScroll(GroundPlayerInteractor interactor, float vertical) {
-        //nothing
-    }
-
-    public void Click(GroundPlayerInteractor interactor) {
-        //nothing
-    }
-
-    public void Place(GroundPlayerInteractor interactor, IPlaceLocation loc) {
         //nothing
     }
 }

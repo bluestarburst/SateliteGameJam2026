@@ -8,10 +8,4 @@ public class KeyboardInteract : MonoBehaviour, IInteractable
     public void OnScroll(GroundPlayerInteractor interactor, float vertical) {
         //nothing
     }
-    public void Click(GroundPlayerInteractor interactor) {
-        //nothing
-    }
-    public void Place(GroundPlayerInteractor interactor, IPlaceLocation loc) {
-        //nothing
-    }
 }
